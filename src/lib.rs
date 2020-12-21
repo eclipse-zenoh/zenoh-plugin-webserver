@@ -16,6 +16,7 @@
 use async_std::sync::Arc;
 use clap::{Arg, ArgMatches};
 use futures::prelude::*;
+use log::debug;
 use std::convert::TryFrom;
 use std::str::FromStr;
 use tide::http::Mime;
@@ -30,7 +31,9 @@ const DEFAULT_HTTP_HOST: &str = "0.0.0.0";
 const DEFAULT_HTTP_PORT: &str = "80";
 const DEFAULT_DIRECTORY_INDEX: &str = "index.html";
 
+const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
 lazy_static::lazy_static! {
+    static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
     static ref DEFAULT_MIME: Mime = encoding::to_mime(encoding::APP_OCTET_STREAM).unwrap();
 }
 
@@ -49,6 +52,7 @@ pub fn start(runtime: Runtime, args: &'static ArgMatches<'_>) {
 
 async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
     env_logger::init();
+    debug!("WebServer plugin {}", LONG_VERSION.as_str());
 
     let http_port = parse_http_port(args.value_of("web-server-port").unwrap());
 
