@@ -31,7 +31,7 @@ zenoh-util = { git = "https://github.com/eclipse-zenoh/zenoh.git" }
 zenoh-router = { git = "https://github.com/eclipse-zenoh/zenoh.git" }
 zenoh-protocol = { git = "https://github.com/eclipse-zenoh/zenoh.git" }
 async-std = "=1.9.0"
-futures = "0.3.0"
+futures = "0.3.12"
 env_logger = "0.8.2"
 log = "0.4"
 git-version = "0.3.4"
