@@ -25,7 +25,7 @@ name = "zplugin_webserver"
 crate-type = ["cdylib"]
 
 [dependencies]
-zenoh = { git =  "https://github.com/eclipse-zenoh/zenoh" }
+zenoh = "0.5.0-beta.8"
 async-std = "=1.9.0"
 futures = "0.3.12"
 env_logger = "0.8.2"
