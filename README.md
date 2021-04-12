@@ -54,7 +54,28 @@ For more advanced use cases you can also:
    [Rust](https://github.com/eclipse-zenoh/zenoh/blob/master/zenoh/examples/zenoh/z_eval.rs) or
    [Python](https://github.com/eclipse-zenoh/zenoh-python/blob/master/examples/zenoh/z_eval.py)).
 
+-------------------------------
+## Troubleshooting
 
+### *Address already in use*
+If in `zenohd` logs you see such error log at startup:
+```
+[2021-04-12T14:20:51Z ERROR zplugin_webserver] Unable to start http server for REST : Os { code: 48, kind: AddrInUse, message: "Address already in use" }
+```
+It means another process is already using this port number that the webserver plugin would like to use (80 by default).
+In such case, you have 2 solutions:
+ - stop the other process using this port
+ - make the webserver plugin to another port via the `--web-server-port=[PORT]` option.
+
+### *Permission denied*
+If in `zenohd` logs you see such error log at startup:
+```
+[2021-04-12T13:55:10Z ERROR zplugin_webserver] Unable to start http server for REST : Os { code: 13, kind: PermissionDenied, message: "Permission denied" 
+```
+It probably means your OS (this usually happens on Linux) forbids the usage of port 80 for non-root user (actually if usually restricts all ports between 0 and 1024).
+In such case, you have 2 solutions:
+ - run zenohd with root privileges (via `sudo`)
+ - use another port via the `--web-server-port=[PORT]` option.
 
 -------------------------------
 ## How to build it
