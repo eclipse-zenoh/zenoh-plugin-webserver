@@ -11,8 +11,6 @@
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
 //
-#![feature(async_closure)]
-
 use async_std::sync::Arc;
 use clap::{Arg, ArgMatches};
 use futures::prelude::*;
@@ -59,7 +57,26 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
 
     let mut app = Server::with_state(Arc::new(zenoh));
 
-    app.at("*").get(async move |req: Request<Arc<Zenoh>>| {
+    app.at("*").get(handle_request);
+
+    if let Err(e) = app.listen(http_port).await {
+        log::error!("Unable to start http server for REST : {:?}", e);
+    }
+}
+
+fn parse_http_port(arg: &str) -> String {
+    match arg.split(':').count() {
+        1 => {
+            match arg.parse::<u16>() {
+                Ok(_) => [DEFAULT_HTTP_HOST, arg].join(&PORT_SEPARATOR.to_string()), // port only
+                Err(_) => [arg, DEFAULT_HTTP_PORT].join(&PORT_SEPARATOR.to_string()), // host only
+            }
+        }
+        _ => arg.to_string(),
+    }
+}
+
+async fn handle_request(req: Request<Arc<Zenoh>>) -> tide::Result<Response> {
         // Reconstruct Selector from req.url() (no easier way...)
         let url = req.url();
         log::debug!("GET on {}", url);
@@ -111,23 +128,6 @@ async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
                 &e.to_string(),
             ))
         }
-    });
-
-    if let Err(e) = app.listen(http_port).await {
-        log::error!("Unable to start http server for REST : {:?}", e);
-    }
-}
-
-fn parse_http_port(arg: &str) -> String {
-    match arg.split(':').count() {
-        1 => {
-            match arg.parse::<u16>() {
-                Ok(_) => [DEFAULT_HTTP_HOST, arg].join(&PORT_SEPARATOR.to_string()), // port only
-                Err(_) => [arg, DEFAULT_HTTP_PORT].join(&PORT_SEPARATOR.to_string()), // host only
-            }
-        }
-        _ => arg.to_string(),
-    }
 }
 
 async fn zenoh_get(workspace: &Workspace<'_>, selector: &Selector) -> ZResult<Option<Value>> {
