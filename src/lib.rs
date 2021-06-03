@@ -77,57 +77,56 @@ fn parse_http_port(arg: &str) -> String {
 }
 
 async fn handle_request(req: Request<Arc<Zenoh>>) -> tide::Result<Response> {
-        // Reconstruct Selector from req.url() (no easier way...)
-        let url = req.url();
-        log::debug!("GET on {}", url);
+    // Reconstruct Selector from req.url() (no easier way...)
+    let url = req.url();
+    log::debug!("GET on {}", url);
 
-        // Build corresponding Selector
-        let mut s = String::with_capacity(url.as_str().len());
-        s.push_str(url.path());
+    // Build corresponding Selector
+    let mut s = String::with_capacity(url.as_str().len());
+    s.push_str(url.path());
 
-        // if URL id a directory, append DirectoryIndex
-        if s.ends_with('/') {
-            s.push_str(DEFAULT_DIRECTORY_INDEX);
-        }
+    // if URL id a directory, append DirectoryIndex
+    if s.ends_with('/') {
+        s.push_str(DEFAULT_DIRECTORY_INDEX);
+    }
 
-        let workspace = req.state().workspace(None).await.unwrap();
-        if let Some(q) = url.query() {
-            s.push('?');
-            s.push_str(q);
-        }
-        let mut selector = match Selector::try_from(s) {
-            Ok(sel) => sel,
-            Err(e) => {
-                return Ok(bad_request(
-                    &e.to_string(),
-                ))
-            }
-        };
-        log::trace!("GET on {} => selector: {}", url, selector);
+    let workspace = req.state().workspace(None).await.unwrap();
+    if let Some(q) = url.query() {
+        s.push('?');
+        s.push_str(q);
+    }
+    let mut selector = match Selector::try_from(s) {
+        Ok(sel) => sel,
+        Err(e) => return Ok(bad_request(&e.to_string())),
+    };
+    log::trace!("GET on {} => selector: {}", url, selector);
 
-        // Check if selector's path expression is a Path (i.e. for a single resource)
-        if !selector.path_expr.is_a_path() {
-            return Ok(bad_request(
+    // Check if selector's path expression is a Path (i.e. for a single resource)
+    if !selector.path_expr.is_a_path() {
+        return Ok(bad_request(
                 "The URL must correspond to 1 resource only (i.e. zenoh path expressions not supported)",
-            ))
-        }
+            ));
+    }
 
-        match zenoh_get(&workspace, &selector).await {
-            Ok(Some(value)) => Ok(response_with_value(value)),
-            Ok(None) => {
-                // Check if considering the URL as a directory, there is an existing "URL/DirectoryIndex" resource
-                selector.path_expr = PathExpr::new(format!("{}/{}", selector.path_expr.as_str(), DEFAULT_DIRECTORY_INDEX)).unwrap();
-                if let Ok(Some(_)) = zenoh_get(&workspace, &selector).await {
-                    // In this case, we must reply a redirection to the URL as a directory
-                    Ok(redirect(&format!("{}/", url.path())))
-                } else {
-                    Ok(not_found())
-                }
-            },
-            Err(e) => Ok(internal_error(
-                &e.to_string(),
+    match zenoh_get(&workspace, &selector).await {
+        Ok(Some(value)) => Ok(response_with_value(value)),
+        Ok(None) => {
+            // Check if considering the URL as a directory, there is an existing "URL/DirectoryIndex" resource
+            selector.path_expr = PathExpr::new(format!(
+                "{}/{}",
+                selector.path_expr.as_str(),
+                DEFAULT_DIRECTORY_INDEX
             ))
+            .unwrap();
+            if let Ok(Some(_)) = zenoh_get(&workspace, &selector).await {
+                // In this case, we must reply a redirection to the URL as a directory
+                Ok(redirect(&format!("{}/", url.path())))
+            } else {
+                Ok(not_found())
+            }
         }
+        Err(e) => Ok(internal_error(&e.to_string())),
+    }
 }
 
 async fn zenoh_get(workspace: &Workspace<'_>, selector: &Selector) -> ZResult<Option<Value>> {
