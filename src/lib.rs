@@ -188,9 +188,9 @@ fn redirect(url: &str) -> Response {
     res
 }
 
-fn response_ok(content_type: Mime, payload: RBuf) -> Response {
+fn response_ok(content_type: Mime, payload: ZBuf) -> Response {
     let mut res = Response::new(StatusCode::Ok);
     res.set_content_type(content_type);
-    res.set_body(payload.get_vec());
+    res.set_body(payload.contiguous().as_slice());
     res
 }
