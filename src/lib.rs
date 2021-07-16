@@ -22,6 +22,7 @@ use tide::{Request, Response, Server, StatusCode};
 use zenoh::net::runtime::Runtime;
 use zenoh::net::*;
 use zenoh::{PathExpr, Selector, Value, Workspace, Zenoh};
+use zenoh_plugin_trait::{prelude::*, PluginId};
 
 const PORT_SEPARATOR: char = ':';
 const DEFAULT_HTTP_HOST: &str = "0.0.0.0";
@@ -34,20 +35,37 @@ lazy_static::lazy_static! {
     static ref DEFAULT_MIME: Mime = encoding::to_mime(encoding::APP_OCTET_STREAM).unwrap();
 }
 
-#[no_mangle]
-pub fn get_expected_args<'a, 'b>() -> Vec<Arg<'a, 'b>> {
-    vec![
-        Arg::from_usage("--web-server-port 'The Web Server plugin's http port'")
-            .default_value(DEFAULT_HTTP_PORT),
-    ]
+pub struct WebServerPlugin;
+
+impl Plugin for WebServerPlugin {
+    type Requirements = Vec<Arg<'static, 'static>>;
+
+    type StartArgs = (Runtime, ArgMatches<'static>);
+
+    fn compatibility() -> zenoh_plugin_trait::PluginId {
+        PluginId {
+            uid: "zenoh-plugin-webserver",
+        }
+    }
+
+    fn get_requirements() -> Self::Requirements {
+        vec![
+            Arg::from_usage("--web-server-port 'The Web Server plugin's http port'")
+                .default_value(DEFAULT_HTTP_PORT),
+        ]
+    }
+
+    fn start(
+        (runtime, args): &Self::StartArgs,
+    ) -> Result<Box<dyn std::any::Any + Send + Sync>, Box<dyn std::error::Error>> {
+        async_std::task::spawn(run(runtime.clone(), args.to_owned()));
+        Ok(Box::new(()))
+    }
 }
 
-#[no_mangle]
-pub fn start(runtime: Runtime, args: &'static ArgMatches<'_>) {
-    async_std::task::spawn(run(runtime, args));
-}
+zenoh_plugin_trait::declare_plugin!(WebServerPlugin);
 
-async fn run(runtime: Runtime, args: &'static ArgMatches<'_>) {
+async fn run(runtime: Runtime, args: ArgMatches<'_>) {
     env_logger::init();
     debug!("WebServer plugin {}", LONG_VERSION.as_str());
 
