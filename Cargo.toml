@@ -14,10 +14,13 @@
 [package]
 name = "zenoh_plugin_webserver"
 version = "0.5.0-dev"
-authors = ["kydos <angelo@icorsaro.net>",
-           "Julien Enoch <julien@enoch.fr>",
-           "Olivier Hécart <olivier.hecart@adlinktech.com>",
-		   "Luca Cominardi <luca.cominardi@adlinktech.com>"]
+authors = [
+    "kydos <angelo@icorsaro.net>",
+    "Julien Enoch <julien@enoch.fr>",
+    "Olivier Hécart <olivier.hecart@adlinktech.com>",
+    "Luca Cominardi <luca.cominardi@adlinktech.com>",
+    "Pierre Avital <pierre.avital@adlinktech.com>",
+]
 edition = "2018"
 
 [lib]
@@ -25,7 +28,8 @@ name = "zplugin_webserver"
 crate-type = ["cdylib"]
 
 [dependencies]
-zenoh = { git =  "https://github.com/eclipse-zenoh/zenoh" }
+zenoh = { git = "https://github.com/eclipse-zenoh/zenoh" }
+zenoh-plugin-trait = { git = "https://github.com/eclipse-zenoh/zenoh" }
 async-std = "=1.9.0"
 futures = "0.3.12"
 env_logger = "0.8.2"
