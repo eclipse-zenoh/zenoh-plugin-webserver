@@ -115,11 +115,11 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
     }
     log::trace!("GET on {} => selector: {}", url, selector);
 
-    // Check if selector's path expression is a Path (i.e. for a single resource)
+    // Check if selector's key expression is a single key (i.e. for a single resource)
     if selector.contains('*') {
         return Ok(bad_request(
-                "The URL must correspond to 1 resource only (i.e. zenoh path expressions not supported)",
-            ));
+            "The URL must correspond to 1 resource only (i.e. zenoh key expressions not supported)",
+        ));
     }
 
     match zenoh_get(session, &selector).await {
