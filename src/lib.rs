@@ -148,7 +148,7 @@ async fn handle_request(req: Request<Arc<Zenoh>>) -> tide::Result<Response> {
 }
 
 async fn zenoh_get(workspace: &Workspace<'_>, selector: &Selector) -> ZResult<Option<Value>> {
-    let mut stream = workspace.get(&selector).await?;
+    let mut stream = workspace.get(selector).await?;
     Ok(stream.next().await.map(|data| data.value))
 }
 
