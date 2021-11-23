@@ -88,9 +88,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.44"
+version = "1.0.48"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61604a8f862e1d5c3229fdd78f8b02c68dcf73a4c4b05fd636d12240aaa242c1"
+checksum = "62e1f47f7dc0422027a4e370dd4548d4d66b26782e513e98dca1e689e058a80e"
 
 [[package]]
 name = "arrayref"
@@ -2168,9 +2168,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.68"
+version = "1.0.71"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f690853975602e1bfe1ccbf50504d67174e3bcf340f23b5ea9992e0587a52d8"
+checksum = "063bf466a64011ac24040a49009724ee60a57da1b437617ceb32e53ad61bfb19"
 dependencies = [
  "itoa",
  "ryu",
@@ -2729,9 +2729,9 @@ dependencies = [
 
 [[package]]
 name = "validated_struct"
-version = "0.1.10"
+version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44e0fae9302755a7ead9ce0096d4dc056b9cef3b0f7fe956f6d1678c38a01180"
+checksum = "85affc53ebb88700a36aefff74b6a4db38dbccf26ec777d40c9e9b471be261f8"
 dependencies = [
  "json5",
  "serde",
@@ -2741,9 +2741,9 @@ dependencies = [
 
 [[package]]
 name = "validated_struct_macros"
-version = "0.1.9"
+version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c978affcb752e5ad50358512e51b5f772c7310612130f06cb4d97978d2cb325"
+checksum = "ca689f3addec28c7d67ed3139498d0325253c71bf58ef57c2ba76141f7ce576f"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2942,7 +2942,7 @@ dependencies = [
 [[package]]
 name = "zenoh"
 version = "0.5.0-dev"
-source = "git+https://github.com/eclipse-zenoh/zenoh?branch=apis-merge#91959f13d72a0d4e68203e7b2a43e5d12876efd2"
+source = "git+https://github.com/eclipse-zenoh/zenoh?branch=apis-merge#5de8519ec810bb9ad5aaa588084c0182b0629306"
 dependencies = [
  "async-global-executor",
  "async-rustls",
@@ -2990,7 +2990,7 @@ dependencies = [
 [[package]]
 name = "zenoh-macros"
 version = "0.5.0-dev"
-source = "git+https://github.com/eclipse-zenoh/zenoh?branch=apis-merge#91959f13d72a0d4e68203e7b2a43e5d12876efd2"
+source = "git+https://github.com/eclipse-zenoh/zenoh?branch=apis-merge#5de8519ec810bb9ad5aaa588084c0182b0629306"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3001,18 +3001,18 @@ dependencies = [
 [[package]]
 name = "zenoh-plugin-trait"
 version = "0.1.0-dev"
-source = "git+https://github.com/eclipse-zenoh/zenoh?branch=apis-merge#91959f13d72a0d4e68203e7b2a43e5d12876efd2"
+source = "git+https://github.com/eclipse-zenoh/zenoh?branch=apis-merge#5de8519ec810bb9ad5aaa588084c0182b0629306"
 dependencies = [
- "clap",
  "libloading",
  "log",
+ "serde_json",
  "zenoh-util",
 ]
 
 [[package]]
 name = "zenoh-util"
 version = "0.5.0-dev"
-source = "git+https://github.com/eclipse-zenoh/zenoh?branch=apis-merge#91959f13d72a0d4e68203e7b2a43e5d12876efd2"
+source = "git+https://github.com/eclipse-zenoh/zenoh?branch=apis-merge#5de8519ec810bb9ad5aaa588084c0182b0629306"
 dependencies = [
  "aes 0.7.5",
  "async-std",
@@ -3043,6 +3043,7 @@ dependencies = [
 name = "zenoh_plugin_webserver"
 version = "0.5.0-dev"
 dependencies = [
+ "anyhow",
  "async-std",
  "clap",
  "env_logger",
@@ -3051,6 +3052,7 @@ dependencies = [
  "lazy_static",
  "log",
  "rustc_version 0.4.0",
+ "serde_json",
  "tide",
  "zenoh",
  "zenoh-plugin-trait",

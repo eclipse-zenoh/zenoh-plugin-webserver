@@ -30,6 +30,7 @@ crate-type = ["cdylib"]
 [dependencies]
 zenoh = { git = "https://github.com/eclipse-zenoh/zenoh", branch = "apis-merge" }
 zenoh-plugin-trait = { git = "https://github.com/eclipse-zenoh/zenoh", branch = "apis-merge" }
+anyhow = "1.0.48"
 async-std = "=1.9.0"
 futures = "0.3.12"
 env_logger = "0.9.0"
@@ -38,6 +39,7 @@ git-version = "0.3.4"
 clap = "2"
 tide = "0.16.0"
 lazy_static = "1.4.0"
+serde_json = "1.0.71"
 
 [build-dependencies]
 rustc_version = "0.4.0"
