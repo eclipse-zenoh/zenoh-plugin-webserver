@@ -13,7 +13,7 @@
 #
 [package]
 name = "zenoh_plugin_webserver"
-version = "0.5.0-dev"
+version = "0.5.0-beta.9"
 authors = [
     "kydos <angelo@icorsaro.net>",
     "Julien Enoch <julien@enoch.fr>",
@@ -28,11 +28,11 @@ name = "zplugin_webserver"
 crate-type = ["cdylib"]
 
 [dependencies]
-zenoh = { git = "https://github.com/eclipse-zenoh/zenoh" }
-zenoh-plugin-trait = { git = "https://github.com/eclipse-zenoh/zenoh" }
+zenoh = "0.5.0-beta.9"
+zenoh-plugin-trait = "0.5.0-beta.9"
 async-std = "=1.9.0"
 futures = "0.3.12"
-env_logger = "0.8.2"
+env_logger = "0.9.0"
 log = "0.4"
 git-version = "0.3.4"
 clap = "2"
@@ -48,4 +48,4 @@ maintainer = "zenoh-dev@eclipse.org"
 copyright = "2017, 2020 ADLINK Technology Inc."
 section = "net"
 license-file = ["LICENSE", "0"]
-depends = "zenohd (=0.5.0-dev)"
+depends = "zenohd (=0.5.0-beta.9)"

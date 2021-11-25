@@ -697,19 +697,6 @@ checksum = "212d0f5754cb6769937f4501cc0e67f4f4483c8d2c3e1e922ee9edbe4ab4c7c0"
 
 [[package]]
 name = "env_logger"
-version = "0.8.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a19187fea3ac7e84da7dacf48de0c45d63c6a76f9490dae389aead16c243fce3"
-dependencies = [
- "atty",
- "humantime",
- "log",
- "regex",
- "termcolor",
-]
-
-[[package]]
-name = "env_logger"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b2cf0344971ee6c64c31be0d530793fba457d322dfec2810c453d0ef228f9c3"
@@ -2554,8 +2541,9 @@ dependencies = [
 
 [[package]]
 name = "zenoh"
-version = "0.5.0-dev"
-source = "git+https://github.com/eclipse-zenoh/zenoh#41d71d77a4d6d2ec33997d58dfbb7edd72324580"
+version = "0.5.0-beta.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "243817a89ce92e95dbc0cdf6095358546860b94ffdfea9b52f11b92dffda51f6"
 dependencies = [
  "async-global-executor",
  "async-rustls",
@@ -2564,7 +2552,7 @@ dependencies = [
  "base64 0.13.0",
  "bincode",
  "clap",
- "env_logger 0.9.0",
+ "env_logger",
  "event-listener",
  "flume",
  "futures",
@@ -2596,8 +2584,9 @@ dependencies = [
 
 [[package]]
 name = "zenoh-plugin-trait"
-version = "0.1.0-dev"
-source = "git+https://github.com/eclipse-zenoh/zenoh#41d71d77a4d6d2ec33997d58dfbb7edd72324580"
+version = "0.5.0-beta.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "116221d28f0620cf49c11c5e60dde1cd97994e9a1038dfabb9e38dc97e8f9612"
 dependencies = [
  "clap",
  "libloading",
@@ -2607,8 +2596,9 @@ dependencies = [
 
 [[package]]
 name = "zenoh-util"
-version = "0.5.0-dev"
-source = "git+https://github.com/eclipse-zenoh/zenoh#41d71d77a4d6d2ec33997d58dfbb7edd72324580"
+version = "0.5.0-beta.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a3291856c8fabb954829b1aed5a2255b135637cb649f19b163c8411db3d0d07"
 dependencies = [
  "aes 0.7.5",
  "async-std",
@@ -2636,11 +2626,11 @@ dependencies = [
 
 [[package]]
 name = "zenoh_plugin_webserver"
-version = "0.5.0-dev"
+version = "0.5.0-beta.9"
 dependencies = [
  "async-std",
  "clap",
- "env_logger 0.8.4",
+ "env_logger",
  "futures",
  "git-version",
  "lazy_static",
