@@ -10,8 +10,7 @@
 //
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
-//
-use anyhow::anyhow;
+
 use async_std::sync::Arc;
 use futures::prelude::*;
 use log::debug;
@@ -20,8 +19,10 @@ use tide::http::Mime;
 use tide::{Request, Response, Server, StatusCode};
 use zenoh::buf::ZBuf;
 use zenoh::net::runtime::Runtime;
+use zenoh::Result as ZResult;
 use zenoh::{prelude::*, Session};
 use zenoh_plugin_trait::{prelude::*, PluginId, RunningPlugin, RunningPluginTrait};
+use zenoh_util::bail;
 
 const PORT_SEPARATOR: char = ':';
 const DEFAULT_HTTP_HOST: &str = "0.0.0.0";
@@ -45,15 +46,12 @@ impl Plugin for WebServerPlugin {
         }
     }
 
-    fn start(
-        name: &str,
-        runtime: &Self::StartArgs,
-    ) -> Result<RunningPlugin, Box<dyn std::error::Error>> {
+    fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<RunningPlugin> {
         let http_port = {
             parse_http_port(
             match runtime.config.lock().plugin(name).map(|p| p.get("listener")) {
                 Some(Some(serde_json::Value::String(s))) => s,
-                _ => return Err(anyhow!("Plugin `{}`: missing or invalid option `{}/listener` (must be a string of the form <url>:<port>)", name, name).into())
+                _ => bail!("Plugin `{}`: missing or invalid option `{}/listener` (must be a string of the form <url>:<port>)", name, name)
             })
         };
         async_std::task::spawn(run(runtime.clone(), http_port));
@@ -65,11 +63,10 @@ impl Plugin for WebServerPlugin {
 impl RunningPluginTrait for WebServerPlugin {
     fn config_checker(&self) -> zenoh_plugin_trait::ValidationFunction {
         Arc::new(|name, _, _| {
-            Err(anyhow::anyhow!(
+            bail!(
                 "Plugin `{}` doesn't support hot configuration changes",
                 name
             )
-            .into())
         })
     }
 }
