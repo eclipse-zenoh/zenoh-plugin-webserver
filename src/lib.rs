@@ -10,9 +10,8 @@
 //
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
-//
+
 use async_std::sync::Arc;
-use clap::{Arg, ArgMatches};
 use futures::prelude::*;
 use log::debug;
 use std::str::FromStr;
@@ -20,8 +19,10 @@ use tide::http::Mime;
 use tide::{Request, Response, Server, StatusCode};
 use zenoh::buf::ZBuf;
 use zenoh::net::runtime::Runtime;
+use zenoh::Result as ZResult;
 use zenoh::{prelude::*, Session};
-use zenoh_plugin_trait::{prelude::*, PluginId};
+use zenoh_plugin_trait::{prelude::*, PluginId, RunningPlugin, RunningPluginTrait};
+use zenoh_util::bail;
 
 const PORT_SEPARATOR: char = ':';
 const DEFAULT_HTTP_HOST: &str = "0.0.0.0";
@@ -37,9 +38,7 @@ lazy_static::lazy_static! {
 pub struct WebServerPlugin;
 
 impl Plugin for WebServerPlugin {
-    type Requirements = Vec<Arg<'static, 'static>>;
-
-    type StartArgs = (Runtime, ArgMatches<'static>);
+    type StartArgs = Runtime;
 
     fn compatibility() -> zenoh_plugin_trait::PluginId {
         PluginId {
@@ -47,28 +46,36 @@ impl Plugin for WebServerPlugin {
         }
     }
 
-    fn get_requirements() -> Self::Requirements {
-        vec![
-            Arg::from_usage("--web-server-port 'The Web Server plugin's http port'")
-                .default_value(DEFAULT_HTTP_PORT),
-        ]
+    fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<RunningPlugin> {
+        let http_port = {
+            parse_http_port(
+            match runtime.config.lock().plugin(name).map(|p| p.get("listener")) {
+                Some(Some(serde_json::Value::String(s))) => s,
+                _ => bail!("Plugin `{}`: missing or invalid option `{}/listener` (must be a string of the form <url>:<port>)", name, name)
+            })
+        };
+        async_std::task::spawn(run(runtime.clone(), http_port));
+        Ok(Box::new(WebServerPlugin))
     }
 
-    fn start(
-        (runtime, args): &Self::StartArgs,
-    ) -> Result<Box<dyn std::any::Any + Send + Sync>, Box<dyn std::error::Error>> {
-        async_std::task::spawn(run(runtime.clone(), args.to_owned()));
-        Ok(Box::new(()))
+    const STATIC_NAME: &'static str = "webserver";
+}
+impl RunningPluginTrait for WebServerPlugin {
+    fn config_checker(&self) -> zenoh_plugin_trait::ValidationFunction {
+        Arc::new(|name, _, _| {
+            bail!(
+                "Plugin `{}` doesn't support hot configuration changes",
+                name
+            )
+        })
     }
 }
 
 zenoh_plugin_trait::declare_plugin!(WebServerPlugin);
 
-async fn run(runtime: Runtime, args: ArgMatches<'_>) {
+async fn run(runtime: Runtime, http_port: String) {
     env_logger::init();
     debug!("WebServer plugin {}", LONG_VERSION.as_str());
-
-    let http_port = parse_http_port(args.value_of("web-server-port").unwrap());
 
     let zenoh = Session::init(runtime, true, vec![], vec![]).await;
 
