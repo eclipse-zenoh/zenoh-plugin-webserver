@@ -29,15 +29,17 @@ crate-type = ["cdylib"]
 
 [dependencies]
 zenoh = { git = "https://github.com/eclipse-zenoh/zenoh" }
+zenoh-util = { git = "https://github.com/eclipse-zenoh/zenoh" }
 zenoh-plugin-trait = { git = "https://github.com/eclipse-zenoh/zenoh" }
 async-std = "=1.9.0"
 futures = "0.3.12"
-env_logger = "0.8.2"
+env_logger = "0.9.0"
 log = "0.4"
 git-version = "0.3.4"
 clap = "2"
 tide = "0.16.0"
 lazy_static = "1.4.0"
+serde_json = "1.0.71"
 
 [build-dependencies]
 rustc_version = "0.4.0"

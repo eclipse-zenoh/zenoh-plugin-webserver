@@ -7,7 +7,7 @@
 
 # Web Server plugin for Eclipse zenoh
 
-The Web Server plugin implements an HTTP server mapping URLs to zenoh paths.  
+The Web Server plugin implements an HTTP server mapping URLs to zenoh keys.  
 This plugin can be used to set-up a Web server where the resources are retrieved from geo-distributed
 zenoh storages, each leveraging various backends (file system, database, memory...).
 
@@ -36,14 +36,14 @@ Here are the steps:
     ```
  4. Add a File System storage exposing the `/var/www/html` directory in read-only mode under the `/my-site` zenoh prefix:
     ```bash
-    curl -X PUT -H 'content-type:application/properties' -d "path_expr=/my-site/**;path_prefix=/my-site;dir=/var/www/html;read_only" http://localhost:8000/@/router/local/plugin/storages/backend/fs/storage/my-site
+    curl -X PUT -H 'content-type:application/properties' -d "key_expr=/my-site/**;key_prefix=/my-site;dir=/var/www/html;read_only" http://localhost:8000/@/router/local/plugin/storages/backend/fs/storage/my-site
     ```
  5. Now you can browse your site on http://localhost/my-site.
 
 
 For more advanced use cases you can also:
  - Have the files of your web sites stored on different hosts. Running a zenoh router with a File System Storage on
-   each host allow to make all the files available under the `/my-site` zenoh path.
+   each host allow to make all the files available under the `/my-site` zenoh key.
  - Duplicate the files of your web sites on several hosts to provide fault tolerance.
  - Start several zenoh routers with the Web Service plugin on different hosts (not necessarly the same than the
    hosts running the File System storages). Each host will serve your web site.

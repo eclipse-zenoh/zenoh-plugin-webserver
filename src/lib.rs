@@ -10,19 +10,19 @@
 //
 // Contributors:
 //   ADLINK zenoh team, <zenoh@adlink-labs.tech>
-//
+
 use async_std::sync::Arc;
-use clap::{Arg, ArgMatches};
 use futures::prelude::*;
 use log::debug;
-use std::convert::TryFrom;
 use std::str::FromStr;
 use tide::http::Mime;
 use tide::{Request, Response, Server, StatusCode};
+use zenoh::buf::ZBuf;
 use zenoh::net::runtime::Runtime;
-use zenoh::net::*;
-use zenoh::{PathExpr, Selector, Value, Workspace, Zenoh};
-use zenoh_plugin_trait::{prelude::*, PluginId};
+use zenoh::Result as ZResult;
+use zenoh::{prelude::*, Session};
+use zenoh_plugin_trait::{prelude::*, PluginId, RunningPlugin, RunningPluginTrait};
+use zenoh_util::bail;
 
 const PORT_SEPARATOR: char = ':';
 const DEFAULT_HTTP_HOST: &str = "0.0.0.0";
@@ -32,15 +32,13 @@ const DEFAULT_DIRECTORY_INDEX: &str = "index.html";
 const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
 lazy_static::lazy_static! {
     static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
-    static ref DEFAULT_MIME: Mime = encoding::to_mime(encoding::APP_OCTET_STREAM).unwrap();
+    static ref DEFAULT_MIME: Mime = Encoding::APP_OCTET_STREAM.to_mime().unwrap();
 }
 
 pub struct WebServerPlugin;
 
 impl Plugin for WebServerPlugin {
-    type Requirements = Vec<Arg<'static, 'static>>;
-
-    type StartArgs = (Runtime, ArgMatches<'static>);
+    type StartArgs = Runtime;
 
     fn compatibility() -> zenoh_plugin_trait::PluginId {
         PluginId {
@@ -48,30 +46,38 @@ impl Plugin for WebServerPlugin {
         }
     }
 
-    fn get_requirements() -> Self::Requirements {
-        vec![
-            Arg::from_usage("--web-server-port 'The Web Server plugin's http port'")
-                .default_value(DEFAULT_HTTP_PORT),
-        ]
+    fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<RunningPlugin> {
+        let http_port = {
+            parse_http_port(
+            match runtime.config.lock().plugin(name).map(|p| p.get("listener")) {
+                Some(Some(serde_json::Value::String(s))) => s,
+                _ => bail!("Plugin `{}`: missing or invalid option `{}/listener` (must be a string of the form <url>:<port>)", name, name)
+            })
+        };
+        async_std::task::spawn(run(runtime.clone(), http_port));
+        Ok(Box::new(WebServerPlugin))
     }
 
-    fn start(
-        (runtime, args): &Self::StartArgs,
-    ) -> Result<Box<dyn std::any::Any + Send + Sync>, Box<dyn std::error::Error>> {
-        async_std::task::spawn(run(runtime.clone(), args.to_owned()));
-        Ok(Box::new(()))
+    const STATIC_NAME: &'static str = "webserver";
+}
+impl RunningPluginTrait for WebServerPlugin {
+    fn config_checker(&self) -> zenoh_plugin_trait::ValidationFunction {
+        Arc::new(|name, _, _| {
+            bail!(
+                "Plugin `{}` doesn't support hot configuration changes",
+                name
+            )
+        })
     }
 }
 
 zenoh_plugin_trait::declare_plugin!(WebServerPlugin);
 
-async fn run(runtime: Runtime, args: ArgMatches<'_>) {
+async fn run(runtime: Runtime, http_port: String) {
     env_logger::init();
     debug!("WebServer plugin {}", LONG_VERSION.as_str());
 
-    let http_port = parse_http_port(args.value_of("web-server-port").unwrap());
-
-    let zenoh = Zenoh::init(runtime).await;
+    let zenoh = Session::init(runtime, true, vec![], vec![]).await;
 
     let mut app = Server::with_state(Arc::new(zenoh));
 
@@ -94,49 +100,42 @@ fn parse_http_port(arg: &str) -> String {
     }
 }
 
-async fn handle_request(req: Request<Arc<Zenoh>>) -> tide::Result<Response> {
+async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
+    let session = req.state();
+
     // Reconstruct Selector from req.url() (no easier way...)
     let url = req.url();
     log::debug!("GET on {}", url);
 
     // Build corresponding Selector
-    let mut s = String::with_capacity(url.as_str().len());
-    s.push_str(url.path());
+    let mut selector = String::with_capacity(url.as_str().len());
+    selector.push_str(url.path());
 
     // if URL id a directory, append DirectoryIndex
-    if s.ends_with('/') {
-        s.push_str(DEFAULT_DIRECTORY_INDEX);
+    if selector.ends_with('/') {
+        selector.push_str(DEFAULT_DIRECTORY_INDEX);
     }
 
-    let workspace = req.state().workspace(None).await.unwrap();
     if let Some(q) = url.query() {
-        s.push('?');
-        s.push_str(q);
+        selector.push('?');
+        selector.push_str(q);
     }
-    let mut selector = match Selector::try_from(s) {
-        Ok(sel) => sel,
-        Err(e) => return Ok(bad_request(&e.to_string())),
-    };
     log::trace!("GET on {} => selector: {}", url, selector);
 
-    // Check if selector's path expression is a Path (i.e. for a single resource)
-    if !selector.path_expr.is_a_path() {
+    // Check if selector's key expression is a single key (i.e. for a single resource)
+    if selector.contains('*') {
         return Ok(bad_request(
-                "The URL must correspond to 1 resource only (i.e. zenoh path expressions not supported)",
-            ));
+            "The URL must correspond to 1 resource only (i.e. zenoh key expressions not supported)",
+        ));
     }
 
-    match zenoh_get(&workspace, &selector).await {
+    match zenoh_get(session, &selector).await {
         Ok(Some(value)) => Ok(response_with_value(value)),
         Ok(None) => {
             // Check if considering the URL as a directory, there is an existing "URL/DirectoryIndex" resource
-            selector.path_expr = PathExpr::new(format!(
-                "{}/{}",
-                selector.path_expr.as_str(),
-                DEFAULT_DIRECTORY_INDEX
-            ))
-            .unwrap();
-            if let Ok(Some(_)) = zenoh_get(&workspace, &selector).await {
+            selector.push('/');
+            selector.push_str(DEFAULT_DIRECTORY_INDEX);
+            if let Ok(Some(_)) = zenoh_get(session, &selector).await {
                 // In this case, we must reply a redirection to the URL as a directory
                 Ok(redirect(&format!("{}/", url.path())))
             } else {
@@ -147,39 +146,19 @@ async fn handle_request(req: Request<Arc<Zenoh>>) -> tide::Result<Response> {
     }
 }
 
-async fn zenoh_get(workspace: &Workspace<'_>, selector: &Selector) -> ZResult<Option<Value>> {
-    let mut stream = workspace.get(selector).await?;
-    Ok(stream.next().await.map(|data| data.value))
+async fn zenoh_get(session: &Session, selector: &str) -> ZResult<Option<Value>> {
+    let mut stream = session.get(selector).await?;
+    Ok(stream.next().await.map(|reply| reply.data.value))
 }
 
 fn response_with_value(value: Value) -> Response {
-    match value {
-        Value::Custom {
-            encoding_descr,
-            data,
-        } => {
-            log::debug!("Replying with a Custom Value ({})", encoding_descr);
-            response_ok(
-                Mime::from_str(&encoding_descr).unwrap_or_else(|_| DEFAULT_MIME.clone()),
-                data,
-            )
-        }
-        Value::Raw(encoding, data) => {
-            log::debug!("Replying with a Raw Value ({})", encoding);
-            response_ok(
-                encoding::to_mime(encoding).unwrap_or_else(|_| DEFAULT_MIME.clone()),
-                data,
-            )
-        }
-        _ => {
-            let (encoding, data) = value.encode();
-            log::debug!("Replying with a decoded Value ({})", encoding);
-            response_ok(
-                encoding::to_mime(encoding).unwrap_or_else(|_| DEFAULT_MIME.clone()),
-                data,
-            )
-        }
-    }
+    response_ok(
+        value
+            .encoding
+            .to_mime()
+            .unwrap_or_else(|_| DEFAULT_MIME.clone()),
+        value.payload,
+    )
 }
 
 fn bad_request(body: &str) -> Response {
