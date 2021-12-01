@@ -28,9 +28,9 @@ name = "zplugin_webserver"
 crate-type = ["cdylib"]
 
 [dependencies]
-zenoh = { git = "https://github.com/eclipse-zenoh/zenoh", branch = "apis-merge" }
-zenoh-util = { git = "https://github.com/eclipse-zenoh/zenoh", branch = "apis-merge" }
-zenoh-plugin-trait = { git = "https://github.com/eclipse-zenoh/zenoh", branch = "apis-merge" }
+zenoh = { git = "https://github.com/eclipse-zenoh/zenoh" }
+zenoh-util = { git = "https://github.com/eclipse-zenoh/zenoh" }
+zenoh-plugin-trait = { git = "https://github.com/eclipse-zenoh/zenoh" }
 async-std = "=1.9.0"
 futures = "0.3.12"
 env_logger = "0.9.0"
