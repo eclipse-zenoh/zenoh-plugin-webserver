@@ -3003,7 +3003,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh_plugin_webserver"
-version = "0.5.0-dev"
+version = "0.6.0-dev"
 dependencies = [
  "async-std",
  "clap",
