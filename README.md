@@ -13,15 +13,22 @@ zenoh storages, each leveraging various backends (file system, database, memory.
 
 **Library name** `zplugin_webserver`
 
-**Startup arguments** (added to zenoh router’s startup arguments):
- - `--web-server-port=[PORT]`: The Web Server plugin's http port (default: 80)
+:point_right: **Download stable versions:** https://download.eclipse.org/zenoh/zenoh-plugin-webserver/
 
-:point_right: **Download:** https://download.eclipse.org/zenoh/zenoh-plugin-webserver/
+:point_right: **Build "master" branch:** see [below](#How-to-build-it)
+
+-------------------------------
+## :warning: Documentation for previous 0.5 versions:
+The following documentation related to the version currently in development in "master" branch: 0.6.x.
+
+For previous versions see the README and code of the corresponding tagged version:
+ - [0.5.0-beta.9](https://github.com/eclipse-zenoh/zenoh-plugin-webserver/tree/0.5.0-beta.9#readme)
+ - [0.5.0-beta.8](https://github.com/eclipse-zenoh/zenoh-plugin-webserver/tree/0.5.0-beta.8#readme)
 
 -------------------------------
 ## **Examples of usage**
 
-Assuming you have a static website stored in `/var/www/html` directory, you can:
+Assuming you have a static website, you can:
  - expose the files as zenoh key/values using the [File System backend](https://github.com/eclipse-zenoh/zenoh-backend-filesystem)
  - set-up this Web Server plugin that will allow HTTP clients to browse the files.
 
@@ -29,16 +36,27 @@ Here are the steps:
  1. Make sure the libraries for the File System backend and the Web Server plugin are available for the zenoh router:  
     either installing their packages (depending your platform), either downloading the library files corresponding
     to your platform in your `~/.zenoh/lib` directory.
- 2. Start the zenoh router (`zenohd`). It will automatically load the Web Server plugin and make it available on port 80.
- 3. Add the File System backend (for instance using `curl` on the REST API):
-    ```bash
-    curl -X PUT http://localhost:8000/@/router/local/plugin/storages/backend/fs
+ 2. Copy the website files into a `~/.zenoh/zbackend_fs/my-site` directory (or make it a symbolic link to the path of your website)
+ 3. Create a `zenoh.json5` configuration file containing:
+    ```json5
+    {
+      plugins: {
+        webserver: {
+          listener: "8080"
+        },
+        storages: {
+          backends: {
+            fs: {
+              storages: {
+                demo: {
+                  key_expr: "/my-site/**",
+                  strip_prefix: "/my-site",
+                  dir: "my-site",
+                  read_only: true
+    } } } } } } }
     ```
- 4. Add a File System storage exposing the `/var/www/html` directory in read-only mode under the `/my-site` zenoh prefix:
-    ```bash
-    curl -X PUT -H 'content-type:application/properties' -d "key_expr=/my-site/**;key_prefix=/my-site;dir=/var/www/html;read_only" http://localhost:8000/@/router/local/plugin/storages/backend/fs/storage/my-site
-    ```
- 5. Now you can browse your site on http://localhost/my-site.
+ 4. Start the zenoh router (`zenohd`). It will automatically load the Web Server plugin and make it available on port 8080. It will also create a storage replying to any zenoh query on key expressions starting with `/my-site/`.  
+ Now you can browse your site on http://localhost:8080/my-site.
 
 
 For more advanced use cases you can also:
@@ -62,20 +80,20 @@ If in `zenohd` logs you see such error log at startup:
 ```
 [2021-04-12T14:20:51Z ERROR zplugin_webserver] Unable to start http server for REST : Os { code: 48, kind: AddrInUse, message: "Address already in use" }
 ```
-It means another process is already using this port number that the webserver plugin would like to use (80 by default).
+It means another process is already using this port number that the webserver plugin would like to use.
 In such case, you have 2 solutions:
  - stop the other process using this port
- - make the webserver plugin to another port via the `--web-server-port=[PORT]` option.
+ - make the webserver plugin to another port changing its `listener` option.
 
 ### *Permission denied*
 If in `zenohd` logs you see such error log at startup:
 ```
 [2021-04-12T13:55:10Z ERROR zplugin_webserver] Unable to start http server for REST : Os { code: 13, kind: PermissionDenied, message: "Permission denied" 
 ```
-It probably means your OS (this usually happens on Linux) forbids the usage of port 80 for non-root user (actually if usually restricts all ports between 0 and 1024).
+It probably means your OS (this usually happens on Linux) forbids the usage of the configured port for non-root user (actually it usually restricts all ports between 0 and 1024).
 In such case, you have 2 solutions:
  - run zenohd with root privileges (via `sudo`)
- - use another port via the `--web-server-port=[PORT]` option.
+ - use another changing he webserver plugin's `listener` option.
 
 -------------------------------
 ## How to build it
