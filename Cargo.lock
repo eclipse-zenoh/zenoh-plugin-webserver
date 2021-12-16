@@ -3013,6 +3013,7 @@ dependencies = [
  "lazy_static",
  "log",
  "rustc_version 0.4.0",
+ "serde",
  "serde_json",
  "tide",
  "zenoh",

@@ -22,11 +22,11 @@ use zenoh::net::runtime::Runtime;
 use zenoh::Result as ZResult;
 use zenoh::{prelude::*, Session};
 use zenoh_plugin_trait::{prelude::*, PluginId, RunningPlugin, RunningPluginTrait};
-use zenoh_util::bail;
+use zenoh_util::{bail, zerror};
 
-const PORT_SEPARATOR: char = ':';
-const DEFAULT_HTTP_HOST: &str = "0.0.0.0";
-const DEFAULT_HTTP_PORT: &str = "80";
+mod config;
+use config::Config;
+
 const DEFAULT_DIRECTORY_INDEX: &str = "index.html";
 
 const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
@@ -47,14 +47,14 @@ impl Plugin for WebServerPlugin {
     }
 
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<RunningPlugin> {
-        let http_port = {
-            parse_http_port(
-            match runtime.config.lock().plugin(name).map(|p| p.get("listener")) {
-                Some(Some(serde_json::Value::String(s))) => s,
-                _ => bail!("Plugin `{}`: missing or invalid option `{}/listener` (must be a string of the form <url>:<port>)", name, name)
-            })
-        };
-        async_std::task::spawn(run(runtime.clone(), http_port));
+        env_logger::init();
+        let runtime_conf = runtime.config.lock();
+        let plugin_conf = runtime_conf
+            .plugin(name)
+            .ok_or_else(|| zerror!("Plugin `{}`: missing config", name))?;
+        let conf: Config = serde_json::from_value(plugin_conf.clone())
+            .map_err(|e| zerror!("Plugin `{}` configuration error: {}", name, e))?;
+        async_std::task::spawn(run(runtime.clone(), conf));
         Ok(Box::new(WebServerPlugin))
     }
 
@@ -73,8 +73,7 @@ impl RunningPluginTrait for WebServerPlugin {
 
 zenoh_plugin_trait::declare_plugin!(WebServerPlugin);
 
-async fn run(runtime: Runtime, http_port: String) {
-    env_logger::init();
+async fn run(runtime: Runtime, conf: Config) {
     debug!("WebServer plugin {}", LONG_VERSION.as_str());
 
     let zenoh = Session::init(runtime, true, vec![], vec![]).await;
@@ -83,20 +82,8 @@ async fn run(runtime: Runtime, http_port: String) {
 
     app.at("*").get(handle_request);
 
-    if let Err(e) = app.listen(http_port).await {
+    if let Err(e) = app.listen(conf.http_port).await {
         log::error!("Unable to start http server for REST : {:?}", e);
-    }
-}
-
-fn parse_http_port(arg: &str) -> String {
-    match arg.split(':').count() {
-        1 => {
-            match arg.parse::<u16>() {
-                Ok(_) => [DEFAULT_HTTP_HOST, arg].join(&PORT_SEPARATOR.to_string()), // port only
-                Err(_) => [arg, DEFAULT_HTTP_PORT].join(&PORT_SEPARATOR.to_string()), // host only
-            }
-        }
-        _ => arg.to_string(),
     }
 }
 

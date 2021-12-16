@@ -42,7 +42,7 @@ Here are the steps:
     {
       plugins: {
         webserver: {
-          listener: "8080"
+          http_port: "8080"
         },
         storages: {
           backends: {
@@ -73,7 +73,14 @@ For more advanced use cases you can also:
    [Python](https://github.com/eclipse-zenoh/zenoh-python/blob/master/examples/zenoh/z_eval.py)).
 
 -------------------------------
-## Troubleshooting
+## **Configuration**
+
+In its configuration part, the plugin supports those settings:
+ - **`http_port`** - int or string - required:  
+   either a port number as an integer or a string, either a string with format `"<local_ip>:<port_number>"`
+
+-------------------------------
+## **Troubleshooting**
 
 ### *Address already in use*
 If in `zenohd` logs you see such error log at startup:
@@ -96,7 +103,7 @@ In such case, you have 2 solutions:
  - use another changing he webserver plugin's `listener` option.
 
 -------------------------------
-## How to build it
+## **How to build it**
 
 At first, install [Cargo and Rust](https://doc.rust-lang.org/cargo/getting-started/installation.html). 
 
