@@ -19,9 +19,9 @@ use tide::http::Mime;
 use tide::{Request, Response, Server, StatusCode};
 use zenoh::buf::ZBuf;
 use zenoh::net::runtime::Runtime;
+use zenoh::plugins::{Plugin, RunningPlugin, RunningPluginTrait, ZenohPlugin};
 use zenoh::Result as ZResult;
 use zenoh::{prelude::*, Session};
-use zenoh_plugin_trait::{prelude::*, PluginId, RunningPlugin, RunningPluginTrait};
 use zenoh_util::{bail, zerror};
 
 mod config;
@@ -36,15 +36,10 @@ lazy_static::lazy_static! {
 }
 
 pub struct WebServerPlugin;
-
+impl ZenohPlugin for WebServerPlugin {}
 impl Plugin for WebServerPlugin {
     type StartArgs = Runtime;
-
-    fn compatibility() -> zenoh_plugin_trait::PluginId {
-        PluginId {
-            uid: "zenoh-plugin-webserver",
-        }
-    }
+    type RunningPlugin = RunningPlugin;
 
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<RunningPlugin> {
         env_logger::init();
@@ -61,13 +56,20 @@ impl Plugin for WebServerPlugin {
     const STATIC_NAME: &'static str = "webserver";
 }
 impl RunningPluginTrait for WebServerPlugin {
-    fn config_checker(&self) -> zenoh_plugin_trait::ValidationFunction {
+    fn config_checker(&self) -> zenoh::plugins::ValidationFunction {
         Arc::new(|name, _, _| {
             bail!(
                 "Plugin `{}` doesn't support hot configuration changes",
                 name
             )
         })
+    }
+    fn adminspace_getter<'a>(
+        &'a self,
+        _selector: &'a Selector<'a>,
+        _plugin_status_key: &str,
+    ) -> ZResult<Vec<zenoh::plugins::Response>> {
+        Ok(Vec::new())
     }
 }
 
