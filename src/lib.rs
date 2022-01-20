@@ -22,7 +22,7 @@ use zenoh::net::runtime::Runtime;
 use zenoh::plugins::{Plugin, RunningPlugin, RunningPluginTrait, ZenohPlugin};
 use zenoh::Result as ZResult;
 use zenoh::{prelude::*, Session};
-use zenoh_util::{bail, zerror};
+use zenoh_core::{bail, zerror};
 
 mod config;
 use config::Config;
