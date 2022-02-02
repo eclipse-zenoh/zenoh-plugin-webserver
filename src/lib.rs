@@ -32,7 +32,7 @@ const DEFAULT_DIRECTORY_INDEX: &str = "index.html";
 const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
 lazy_static::lazy_static! {
     static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
-    static ref DEFAULT_MIME: Mime = Encoding::APP_OCTET_STREAM.to_mime().unwrap();
+    static ref DEFAULT_MIME: Mime = Mime::from_str(&Encoding::APP_OCTET_STREAM.to_string()).unwrap();
 }
 
 pub struct WebServerPlugin;
@@ -141,13 +141,8 @@ async fn zenoh_get(session: &Session, selector: &str) -> ZResult<Option<Value>> 
 }
 
 fn response_with_value(value: Value) -> Response {
-    response_ok(
-        value
-            .encoding
-            .to_mime()
-            .unwrap_or_else(|_| DEFAULT_MIME.clone()),
-        value.payload,
-    )
+    let mime = Mime::from_str(&value.encoding.to_string()).unwrap_or_else(|_| DEFAULT_MIME.clone());
+    response_ok(mime, value.payload)
 }
 
 fn bad_request(body: &str) -> Response {
