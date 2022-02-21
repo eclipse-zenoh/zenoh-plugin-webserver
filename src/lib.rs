@@ -22,6 +22,7 @@ use zenoh::net::runtime::Runtime;
 use zenoh::plugins::{Plugin, RunningPlugin, RunningPluginTrait, ZenohPlugin};
 use zenoh::Result as ZResult;
 use zenoh::{prelude::*, Session};
+use zenoh_buffers::traits::SplitBuffer;
 use zenoh_core::{bail, zerror};
 
 mod config;
@@ -172,6 +173,6 @@ fn redirect(url: &str) -> Response {
 fn response_ok(content_type: Mime, payload: ZBuf) -> Response {
     let mut res = Response::new(StatusCode::Ok);
     res.set_content_type(content_type);
-    res.set_body(payload.contiguous().as_slice());
+    res.set_body(payload.contiguous().into_owned());
     res
 }
