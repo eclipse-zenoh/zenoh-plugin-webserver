@@ -18,6 +18,7 @@ use std::str::FromStr;
 use tide::http::Mime;
 use tide::{Request, Response, Server, StatusCode};
 use zenoh::buf::ZBuf;
+use zenoh::net::protocol::io::SplitBuffer;
 use zenoh::net::runtime::Runtime;
 use zenoh::plugins::{Plugin, RunningPlugin, RunningPluginTrait, ZenohPlugin};
 use zenoh::Result as ZResult;
@@ -172,6 +173,6 @@ fn redirect(url: &str) -> Response {
 fn response_ok(content_type: Mime, payload: ZBuf) -> Response {
     let mut res = Response::new(StatusCode::Ok);
     res.set_content_type(content_type);
-    res.set_body(payload.contiguous().as_slice());
+    res.set_body(&*payload.contiguous());
     res
 }
