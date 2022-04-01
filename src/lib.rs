@@ -138,7 +138,7 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
 
 async fn zenoh_get(session: &Session, selector: &str) -> ZResult<Option<Value>> {
     let mut stream = session.get(selector).await?;
-    Ok(stream.next().await.map(|reply| reply.data.value))
+    Ok(stream.next().await.map(|reply| reply.sample.value))
 }
 
 fn response_with_value(value: Value) -> Response {
