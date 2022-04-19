@@ -22,6 +22,7 @@ use zenoh::buf::ZBuf;
 use zenoh::net::protocol::io::SplitBuffer;
 use zenoh::net::runtime::Runtime;
 use zenoh::plugins::{Plugin, RunningPlugin, RunningPluginTrait, ZenohPlugin};
+use zenoh::query::Reply;
 use zenoh::Result as ZResult;
 use zenoh::{prelude::*, Session};
 use zenoh_core::{bail, zerror};
@@ -139,7 +140,15 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
 
 async fn zenoh_get(session: &Session, selector: &str) -> ZResult<Option<Value>> {
     let mut stream = session.get(selector).await?;
-    Ok(stream.next().await.map(|reply| reply.sample.value))
+    match stream.next().await {
+        Some(Reply {
+            sample: Ok(sample), ..
+        }) => Ok(Some(sample.value)),
+        Some(Reply {
+            sample: Err(value), ..
+        }) => bail!("Zenoh get on {} returned the error: {}", selector, value),
+        None => Ok(None),
+    }
 }
 
 fn response_with_value(value: Value) -> Response {
