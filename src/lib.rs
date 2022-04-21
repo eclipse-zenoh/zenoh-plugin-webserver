@@ -35,7 +35,7 @@ const DEFAULT_DIRECTORY_INDEX: &str = "index.html";
 const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
 lazy_static::lazy_static! {
     static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
-    static ref DEFAULT_MIME: Mime = Mime::from_str(&Encoding::APP_OCTET_STREAM.to_string()).unwrap();
+    static ref DEFAULT_MIME: Mime = Mime::from_str(KnownEncoding::AppOctetStream.into()).unwrap();
 }
 
 pub struct WebServerPlugin;
