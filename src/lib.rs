@@ -13,18 +13,18 @@
 //
 
 use async_std::sync::Arc;
-use futures::prelude::*;
 use log::debug;
 use std::str::FromStr;
 use tide::http::Mime;
 use tide::{Request, Response, Server, StatusCode};
 use zenoh::buf::ZBuf;
-use zenoh::net::protocol::io::SplitBuffer;
 use zenoh::net::runtime::Runtime;
 use zenoh::plugins::{Plugin, RunningPlugin, RunningPluginTrait, ZenohPlugin};
+use zenoh::prelude::r#async::AsyncResolve;
+use zenoh::prelude::*;
 use zenoh::query::Reply;
 use zenoh::Result as ZResult;
-use zenoh::{prelude::*, Session};
+use zenoh::Session;
 use zenoh_core::{bail, zerror};
 
 mod config;
@@ -81,7 +81,7 @@ zenoh_plugin_trait::declare_plugin!(WebServerPlugin);
 async fn run(runtime: Runtime, conf: Config) {
     debug!("WebServer plugin {}", LONG_VERSION.as_str());
 
-    let zenoh = Session::init(runtime, true, vec![], vec![]).await;
+    let zenoh = Session::init(runtime, true, vec![], vec![]).res().await;
 
     let mut app = Server::with_state(Arc::new(zenoh));
 
@@ -139,15 +139,15 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
 }
 
 async fn zenoh_get(session: &Session, selector: &str) -> ZResult<Option<Value>> {
-    let mut stream = session.get(selector).await?;
-    match stream.next().await {
-        Some(Reply {
+    let replies = session.get(selector).res().await?;
+    match replies.recv_async().await {
+        Ok(Reply {
             sample: Ok(sample), ..
         }) => Ok(Some(sample.value)),
-        Some(Reply {
+        Ok(Reply {
             sample: Err(value), ..
         }) => bail!("Zenoh get on {} returned the error: {}", selector, value),
-        None => Ok(None),
+        Err(_) => Ok(None),
     }
 }
 
