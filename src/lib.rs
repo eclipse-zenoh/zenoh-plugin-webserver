@@ -13,7 +13,6 @@
 //
 
 use async_std::sync::Arc;
-use futures::prelude::*;
 use log::debug;
 use std::str::FromStr;
 use tide::http::Mime;
@@ -23,7 +22,7 @@ use zenoh::net::protocol::io::SplitBuffer;
 use zenoh::net::runtime::Runtime;
 use zenoh::plugins::{Plugin, RunningPlugin, RunningPluginTrait, ZenohPlugin};
 use zenoh::Result as ZResult;
-use zenoh::{prelude::*, Session};
+use zenoh::{prelude::r#async::*, Session};
 use zenoh_core::{bail, zerror};
 
 mod config;
@@ -34,7 +33,7 @@ const DEFAULT_DIRECTORY_INDEX: &str = "index.html";
 const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
 lazy_static::lazy_static! {
     static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
-    static ref DEFAULT_MIME: Mime = Mime::from_str(&Encoding::APP_OCTET_STREAM.to_string()).unwrap();
+    static ref DEFAULT_MIME: Mime = Mime::from_str(&Encoding::from(KnownEncoding::AppOctetStream).to_string()).unwrap();
 }
 
 pub struct WebServerPlugin;
@@ -80,7 +79,7 @@ zenoh_plugin_trait::declare_plugin!(WebServerPlugin);
 async fn run(runtime: Runtime, conf: Config) {
     debug!("WebServer plugin {}", LONG_VERSION.as_str());
 
-    let zenoh = Session::init(runtime, true, vec![], vec![]).await;
+    let zenoh = Session::init(runtime, true, vec![], vec![]).res().await;
 
     let mut app = Server::with_state(Arc::new(zenoh));
 
@@ -99,8 +98,9 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
     log::debug!("GET on {}", url);
 
     // Build corresponding Selector
+    let path = url.path();
     let mut selector = String::with_capacity(url.as_str().len());
-    selector.push_str(url.path());
+    selector.push_str(path.strip_prefix('/').unwrap_or(path));
 
     // if URL id a directory, append DirectoryIndex
     if selector.ends_with('/') {
@@ -138,8 +138,13 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
 }
 
 async fn zenoh_get(session: &Session, selector: &str) -> ZResult<Option<Value>> {
-    let mut stream = session.get(selector).await?;
-    Ok(stream.next().await.map(|reply| reply.sample.value))
+    let stream = session.get(selector).res().await?;
+    Ok(stream
+        .recv_async()
+        .await?
+        .sample
+        .ok()
+        .map(|sample| sample.value))
 }
 
 fn response_with_value(value: Value) -> Response {
