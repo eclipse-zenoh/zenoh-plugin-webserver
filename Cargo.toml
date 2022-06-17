@@ -15,11 +15,11 @@
 name = "zenoh_plugin_webserver"
 version = "0.6.0-dev.0"
 authors = [
-    "kydos <angelo@icorsaro.net>",
-    "Julien Enoch <julien@enoch.fr>",
-    "Olivier Hécart <olivier.hecart@adlinktech.com>",
-    "Luca Cominardi <luca.cominardi@gmail.com>",
-    "Pierre Avital <pierre.avital@adlinktech.com>",
+  "kydos <angelo@icorsaro.net>",
+  "Julien Enoch <julien@enoch.fr>",
+  "Olivier Hécart <olivier.hecart@adlinktech.com>",
+  "Luca Cominardi <luca.cominardi@gmail.com>",
+  "Pierre Avital <pierre.avital@adlinktech.com>",
 ]
 edition = "2018"
 

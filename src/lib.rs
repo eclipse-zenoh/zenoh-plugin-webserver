@@ -18,9 +18,9 @@ use std::str::FromStr;
 use tide::http::Mime;
 use tide::{Request, Response, Server, StatusCode};
 use zenoh::buf::ZBuf;
-use zenoh::net::protocol::io::SplitBuffer;
 use zenoh::net::runtime::Runtime;
 use zenoh::plugins::{Plugin, RunningPlugin, RunningPluginTrait, ZenohPlugin};
+use zenoh::query::Reply;
 use zenoh::Result as ZResult;
 use zenoh::{prelude::r#async::*, Session};
 use zenoh_core::{bail, zerror};
@@ -33,7 +33,7 @@ const DEFAULT_DIRECTORY_INDEX: &str = "index.html";
 const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
 lazy_static::lazy_static! {
     static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
-    static ref DEFAULT_MIME: Mime = Mime::from_str(&Encoding::from(KnownEncoding::AppOctetStream).to_string()).unwrap();
+    static ref DEFAULT_MIME: Mime = Mime::from_str(KnownEncoding::AppOctetStream.into()).unwrap();
 }
 
 pub struct WebServerPlugin;
@@ -138,13 +138,16 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
 }
 
 async fn zenoh_get(session: &Session, selector: &str) -> ZResult<Option<Value>> {
-    let stream = session.get(selector).res().await?;
-    Ok(stream
-        .recv_async()
-        .await?
-        .sample
-        .ok()
-        .map(|sample| sample.value))
+    let replies = session.get(selector).res().await?;
+    match replies.recv_async().await {
+        Ok(Reply {
+            sample: Ok(sample), ..
+        }) => Ok(Some(sample.value)),
+        Ok(Reply {
+            sample: Err(value), ..
+        }) => bail!("Zenoh get on {} returned the error: {}", selector, value),
+        Err(_) => Ok(None),
+    }
 }
 
 fn response_with_value(value: Value) -> Response {
