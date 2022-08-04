@@ -12,8 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use async_std::prelude::FutureExt;
 use async_std::sync::Arc;
+use futures::TryStreamExt;
 use log::debug;
+use std::convert::TryFrom;
 use std::str::FromStr;
 use tide::http::Mime;
 use tide::{Request, Response, Server, StatusCode};
@@ -106,7 +109,6 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
     if selector.ends_with('/') {
         selector.push_str(DEFAULT_DIRECTORY_INDEX);
     }
-
     if let Some(q) = url.query() {
         selector.push('?');
         selector.push_str(q);
@@ -119,25 +121,102 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
             "The URL must correspond to 1 resource only (i.e. zenoh key expressions not supported)",
         ));
     }
+    match Selector::try_from(selector) {
+        Ok(selector) => {
+            if selector
+                .value_selector_cowmap()
+                .ok()
+                .map(|m| m.get("_method").map(|x| x.as_ref()) == Some("SUB"))
+                .unwrap_or(false)
+            {
+                log::debug!("Subscribe to {} for Multipart stream", selector.key_expr,);
+                let (sender, receiver) = async_std::channel::bounded(1);
+                async_std::task::spawn(async move {
+                    log::debug!(
+                        "Subscribe to {} for Multipart stream (task {})",
+                        selector.key_expr,
+                        async_std::task::current().id()
+                    );
+                    let sub = req
+                        .state()
+                        .declare_subscriber(&selector.key_expr)
+                        .res_async()
+                        .await
+                        .unwrap();
+                    loop {
+                        let sample = sub.recv_async().await.unwrap();
+                        let mut buf = "--boundary\nContent-Type: ".as_bytes().to_vec();
+                        buf.extend_from_slice(sample.value.encoding.to_string().as_bytes());
+                        buf.extend_from_slice("\n\n".as_bytes());
+                        buf.extend_from_slice(sample.value.payload.contiguous().as_ref());
 
-    match zenoh_get(session, &selector).await {
-        Ok(Some(value)) => Ok(response_with_value(value)),
-        Ok(None) => {
-            // Check if considering the URL as a directory, there is an existing "URL/DirectoryIndex" resource
-            selector.push('/');
-            selector.push_str(DEFAULT_DIRECTORY_INDEX);
-            if let Ok(Some(_)) = zenoh_get(session, &selector).await {
-                // In this case, we must reply a redirection to the URL as a directory
-                Ok(redirect(&format!("{}/", url.path())))
+                        match sender
+                            .send(Ok(buf))
+                            .timeout(std::time::Duration::new(10, 0))
+                            .await
+                        {
+                            Ok(Ok(_)) => {}
+                            Ok(Err(e)) => {
+                                log::debug!(
+                                    "Multipart error ({})! Unsubscribe and terminate (task {})",
+                                    e,
+                                    async_std::task::current().id()
+                                );
+                                if let Err(e) = sub.undeclare().res().await {
+                                    log::error!("Error undeclaring subscriber: {}", e);
+                                }
+                                break;
+                            }
+                            Err(_) => {
+                                log::debug!(
+                                    "Multipart timeout! Unsubscribe and terminate (task {})",
+                                    async_std::task::current().id()
+                                );
+                                if let Err(e) = sub.undeclare().res().await {
+                                    log::error!("Error undeclaring subscriber: {}", e);
+                                }
+                                break;
+                            }
+                        }
+                    }
+                });
+
+                let mut res = Response::new(StatusCode::Ok);
+                res.set_content_type("multipart/x-mixed-replace; boundary=\"boundary\"");
+                res.set_body(tide::Body::from_reader(receiver.into_async_read(), None));
+
+                Ok(res)
             } else {
-                Ok(not_found())
+                match zenoh_get(session, &selector).await {
+                    Ok(Some(value)) => Ok(response_with_value(value)),
+                    Ok(None) => {
+                        // Check if considering the URL as a directory, there is an existing "URL/DirectoryIndex" resource
+                        let mut new_selector = selector.key_expr.as_str().to_string();
+                        new_selector.push('/');
+                        new_selector.push_str(DEFAULT_DIRECTORY_INDEX);
+                        if let Ok(new_selector) = Selector::try_from(new_selector) {
+                            if let Ok(Some(_)) = zenoh_get(session, &new_selector).await {
+                                // In this case, we must reply a redirection to the URL as a directory
+                                Ok(redirect(&format!("{}/", url.path())))
+                            } else {
+                                Ok(not_found())
+                            }
+                        } else {
+                            Ok(not_found())
+                        }
+                    }
+                    Err(e) => Ok(internal_error(&e.to_string())),
+                }
             }
         }
-        Err(e) => Ok(internal_error(&e.to_string())),
+        Err(e) => Err(tide::Error::new(
+            tide::StatusCode::BadRequest,
+            anyhow::anyhow!("{}", e),
+        )),
     }
 }
 
-async fn zenoh_get(session: &Session, selector: &str) -> ZResult<Option<Value>> {
+async fn zenoh_get(session: &Session, selector: &Selector<'_>) -> ZResult<Option<Value>> {
     let replies = session.get(selector).res().await?;
     match replies.recv_async().await {
         Ok(Reply {
