@@ -81,15 +81,8 @@ zenoh_plugin_trait::declare_plugin!(WebServerPlugin);
 async fn run(runtime: Runtime, conf: Config) {
     debug!("WebServer plugin {}", LONG_VERSION.as_str());
 
-    let zenoh = match zenoh::init(runtime).res().await {
-        Ok(session) => Arc::new(session),
-        Err(e) => {
-            log::error!("Unable to init zenoh session for WebServer plugin : {}", e);
-            return;
-        }
-    };
-
-    let mut app = Server::with_state(zenoh);
+    let zenoh = Session::init(runtime, true, vec![], vec![]).res().await;
+    let mut app = Server::with_state(Arc::new(zenoh));
 
     app.at("*").get(handle_request);
 
