@@ -81,14 +81,20 @@ zenoh_plugin_trait::declare_plugin!(WebServerPlugin);
 async fn run(runtime: Runtime, conf: Config) {
     debug!("WebServer plugin {}", LONG_VERSION.as_str());
 
-    let zenoh = Session::init(runtime, true, vec![], vec![]).res().await;
+    let zenoh = match zenoh::init(runtime).res().await {
+        Ok(session) => Arc::new(session),
+        Err(e) => {
+            log::error!("Unable to init zenoh session for WebServer plugin : {}", e);
+            return;
+        }
+    };
 
-    let mut app = Server::with_state(Arc::new(zenoh));
+    let mut app = Server::with_state(zenoh);
 
     app.at("*").get(handle_request);
 
     if let Err(e) = app.listen(conf.http_port).await {
-        log::error!("Unable to start http server for REST : {:?}", e);
+        log::error!("Unable to start http server for WebServer plugin : {}", e);
     }
 }
 
@@ -123,7 +129,7 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
     match Selector::try_from(selector) {
         Ok(selector) => {
             if selector
-                .value_selector_cowmap()
+                .parameters_cowmap()
                 .ok()
                 .map(|m| m.get("_method").map(|x| x.as_ref()) == Some("SUB"))
                 .unwrap_or(false)
