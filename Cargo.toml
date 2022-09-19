@@ -27,6 +27,10 @@ edition = "2018"
 name = "zplugin_webserver"
 crate-type = ["cdylib"]
 
+[features]
+no_mangle = ["zenoh-plugin-trait/no_mangle"]
+default = ["no_mangle"]
+
 [dependencies]
 zenoh = { git = "https://github.com/eclipse-zenoh/zenoh", branch = "api-changes", features = [
   "unstable",
