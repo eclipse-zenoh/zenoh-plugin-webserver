@@ -91,6 +91,7 @@ async fn run(runtime: Runtime, conf: Config) {
 
     let mut app = Server::with_state(zenoh);
 
+    app.at("").get(handle_request);
     app.at("*").get(handle_request);
 
     if let Err(e) = app.listen(conf.http_port).await {
@@ -111,14 +112,13 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
     selector.push_str(path.strip_prefix('/').unwrap_or(path));
 
     // if URL id a directory, append DirectoryIndex
-    if selector.ends_with('/') {
+    if selector.ends_with('/') || selector.is_empty() {
         selector.push_str(DEFAULT_DIRECTORY_INDEX);
     }
     if let Some(q) = url.query() {
         selector.push('?');
         selector.push_str(q);
     }
-    log::trace!("GET on {} => selector: {}", url, selector);
 
     // Check if selector's key expression is a single key (i.e. for a single resource)
     if selector.contains('*') {
