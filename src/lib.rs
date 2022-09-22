@@ -12,18 +12,19 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use async_std::prelude::FutureExt;
 use async_std::sync::Arc;
-use futures::prelude::*;
+use futures::TryStreamExt;
 use log::debug;
+use std::convert::TryFrom;
 use std::str::FromStr;
 use tide::http::Mime;
 use tide::{Request, Response, Server, StatusCode};
-use zenoh::buf::ZBuf;
-use zenoh::net::protocol::io::SplitBuffer;
-use zenoh::net::runtime::Runtime;
-use zenoh::plugins::{Plugin, RunningPlugin, RunningPluginTrait, ZenohPlugin};
+use zenoh::buffers::ZBuf;
+use zenoh::plugins::{Plugin, RunningPlugin, RunningPluginTrait, Runtime, ZenohPlugin};
+use zenoh::query::Reply;
 use zenoh::Result as ZResult;
-use zenoh::{prelude::*, Session};
+use zenoh::{prelude::r#async::*, Session};
 use zenoh_core::{bail, zerror};
 
 mod config;
@@ -34,7 +35,7 @@ const DEFAULT_DIRECTORY_INDEX: &str = "index.html";
 const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
 lazy_static::lazy_static! {
     static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
-    static ref DEFAULT_MIME: Mime = Mime::from_str(&Encoding::APP_OCTET_STREAM.to_string()).unwrap();
+    static ref DEFAULT_MIME: Mime = Mime::from_str(KnownEncoding::AppOctetStream.into()).unwrap();
 }
 
 pub struct WebServerPlugin;
@@ -80,14 +81,21 @@ zenoh_plugin_trait::declare_plugin!(WebServerPlugin);
 async fn run(runtime: Runtime, conf: Config) {
     debug!("WebServer plugin {}", LONG_VERSION.as_str());
 
-    let zenoh = Session::init(runtime, true, vec![], vec![]).await;
+    let zenoh = match zenoh::init(runtime).res().await {
+        Ok(session) => Arc::new(session),
+        Err(e) => {
+            log::error!("Unable to init zenoh session for WebServer plugin : {}", e);
+            return;
+        }
+    };
 
-    let mut app = Server::with_state(Arc::new(zenoh));
+    let mut app = Server::with_state(zenoh);
 
+    app.at("").get(handle_request);
     app.at("*").get(handle_request);
 
     if let Err(e) = app.listen(conf.http_port).await {
-        log::error!("Unable to start http server for REST : {:?}", e);
+        log::error!("Unable to start http server for WebServer plugin : {}", e);
     }
 }
 
@@ -99,19 +107,18 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
     log::debug!("GET on {}", url);
 
     // Build corresponding Selector
+    let path = url.path();
     let mut selector = String::with_capacity(url.as_str().len());
-    selector.push_str(url.path());
+    selector.push_str(path.strip_prefix('/').unwrap_or(path));
 
     // if URL id a directory, append DirectoryIndex
-    if selector.ends_with('/') {
+    if selector.ends_with('/') || selector.is_empty() {
         selector.push_str(DEFAULT_DIRECTORY_INDEX);
     }
-
     if let Some(q) = url.query() {
         selector.push('?');
         selector.push_str(q);
     }
-    log::trace!("GET on {} => selector: {}", url, selector);
 
     // Check if selector's key expression is a single key (i.e. for a single resource)
     if selector.contains('*') {
@@ -119,27 +126,112 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
             "The URL must correspond to 1 resource only (i.e. zenoh key expressions not supported)",
         ));
     }
+    match Selector::try_from(selector) {
+        Ok(selector) => {
+            if selector
+                .parameters_cowmap()
+                .ok()
+                .map(|m| m.get("_method").map(|x| x.as_ref()) == Some("SUB"))
+                .unwrap_or(false)
+            {
+                log::debug!("Subscribe to {} for Multipart stream", selector.key_expr,);
+                let (sender, receiver) = async_std::channel::bounded(1);
+                async_std::task::spawn(async move {
+                    log::debug!(
+                        "Subscribe to {} for Multipart stream (task {})",
+                        selector.key_expr,
+                        async_std::task::current().id()
+                    );
+                    let sub = req
+                        .state()
+                        .declare_subscriber(&selector.key_expr)
+                        .res_async()
+                        .await
+                        .unwrap();
+                    loop {
+                        let sample = sub.recv_async().await.unwrap();
+                        let mut buf = "--boundary\nContent-Type: ".as_bytes().to_vec();
+                        buf.extend_from_slice(sample.value.encoding.to_string().as_bytes());
+                        buf.extend_from_slice("\n\n".as_bytes());
+                        buf.extend_from_slice(sample.value.payload.contiguous().as_ref());
 
-    match zenoh_get(session, &selector).await {
-        Ok(Some(value)) => Ok(response_with_value(value)),
-        Ok(None) => {
-            // Check if considering the URL as a directory, there is an existing "URL/DirectoryIndex" resource
-            selector.push('/');
-            selector.push_str(DEFAULT_DIRECTORY_INDEX);
-            if let Ok(Some(_)) = zenoh_get(session, &selector).await {
-                // In this case, we must reply a redirection to the URL as a directory
-                Ok(redirect(&format!("{}/", url.path())))
+                        match sender
+                            .send(Ok(buf))
+                            .timeout(std::time::Duration::new(10, 0))
+                            .await
+                        {
+                            Ok(Ok(_)) => {}
+                            Ok(Err(e)) => {
+                                log::debug!(
+                                    "Multipart error ({})! Unsubscribe and terminate (task {})",
+                                    e,
+                                    async_std::task::current().id()
+                                );
+                                if let Err(e) = sub.undeclare().res().await {
+                                    log::error!("Error undeclaring subscriber: {}", e);
+                                }
+                                break;
+                            }
+                            Err(_) => {
+                                log::debug!(
+                                    "Multipart timeout! Unsubscribe and terminate (task {})",
+                                    async_std::task::current().id()
+                                );
+                                if let Err(e) = sub.undeclare().res().await {
+                                    log::error!("Error undeclaring subscriber: {}", e);
+                                }
+                                break;
+                            }
+                        }
+                    }
+                });
+
+                let mut res = Response::new(StatusCode::Ok);
+                res.set_content_type("multipart/x-mixed-replace; boundary=\"boundary\"");
+                res.set_body(tide::Body::from_reader(receiver.into_async_read(), None));
+
+                Ok(res)
             } else {
-                Ok(not_found())
+                match zenoh_get(session, &selector).await {
+                    Ok(Some(value)) => Ok(response_with_value(value)),
+                    Ok(None) => {
+                        // Check if considering the URL as a directory, there is an existing "URL/DirectoryIndex" resource
+                        let mut new_selector = selector.key_expr.as_str().to_string();
+                        new_selector.push('/');
+                        new_selector.push_str(DEFAULT_DIRECTORY_INDEX);
+                        if let Ok(new_selector) = Selector::try_from(new_selector) {
+                            if let Ok(Some(_)) = zenoh_get(session, &new_selector).await {
+                                // In this case, we must reply a redirection to the URL as a directory
+                                Ok(redirect(&format!("{}/", url.path())))
+                            } else {
+                                Ok(not_found())
+                            }
+                        } else {
+                            Ok(not_found())
+                        }
+                    }
+                    Err(e) => Ok(internal_error(&e.to_string())),
+                }
             }
         }
-        Err(e) => Ok(internal_error(&e.to_string())),
+        Err(e) => Err(tide::Error::new(
+            tide::StatusCode::BadRequest,
+            anyhow::anyhow!("{}", e),
+        )),
     }
 }
 
-async fn zenoh_get(session: &Session, selector: &str) -> ZResult<Option<Value>> {
-    let mut stream = session.get(selector).await?;
-    Ok(stream.next().await.map(|reply| reply.sample.value))
+async fn zenoh_get(session: &Session, selector: &Selector<'_>) -> ZResult<Option<Value>> {
+    let replies = session.get(selector).res().await?;
+    match replies.recv_async().await {
+        Ok(Reply {
+            sample: Ok(sample), ..
+        }) => Ok(Some(sample.value)),
+        Ok(Reply {
+            sample: Err(value), ..
+        }) => bail!("Zenoh get on {} returned the error: {}", selector, value),
+        Err(_) => Ok(None),
+    }
 }
 
 fn response_with_value(value: Value) -> Response {

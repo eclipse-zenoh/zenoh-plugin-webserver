@@ -50,19 +50,19 @@ Here are the steps:
             fs: {
               storages: {
                 demo: {
-                  key_expr: "/my-site/**",
-                  strip_prefix: "/my-site",
+                  key_expr: "my-site/**",
+                  strip_prefix: "my-site",
                   dir: "my-site",
                   read_only: true
     } } } } } } }
     ```
- 4. Start the zenoh router (`zenohd`). It will automatically load the Web Server plugin and make it available on port 8080. It will also create a storage replying to any zenoh query on key expressions starting with `/my-site/`.  
+ 4. Start the zenoh router (`zenohd`). It will automatically load the Web Server plugin and make it available on port 8080. It will also create a storage replying to any zenoh query on key expressions starting with `my-site/`.  
  Now you can browse your site on http://localhost:8080/my-site.
 
 
 For more advanced use cases you can also:
  - Have the files of your web sites stored on different hosts. Running a zenoh router with a File System Storage on
-   each host allow to make all the files available under the `/my-site` zenoh key.
+   each host allow to make all the files available under the `my-site/` zenoh key.
  - Duplicate the files of your web sites on several hosts to provide fault tolerance.
  - Start several zenoh routers with the Web Service plugin on different hosts (not necessarly the same than the
    hosts running the File System storages). Each host will serve your web site.
@@ -109,8 +109,8 @@ In such case, you have 2 solutions:
 At first, install [Cargo and Rust](https://doc.rust-lang.org/cargo/getting-started/installation.html). 
 
 :warning: **WARNING** :warning: : As Rust doesn't have a stable ABI, the backend library should be
-built with the exact same Rust version than `zenohd`. Otherwise, incompatibilities in memory mapping
-of shared types between `zenohd` and the library can lead to a `"SIGSEV"` crash.
+built with the exact same Rust version than `zenohd`, and using for `zenoh` dependency the same version (or commit number) than 'zenohd'.
+Otherwise, incompatibilities in memory mapping of shared types between `zenohd` and the library can lead to a `"SIGSEV"` crash.
 
 To know the Rust version you're `zenohd` has been built with, use the `--version` option.  
 Example:
@@ -127,8 +127,12 @@ Install and use this toolchain with the following command:
 $ rustup default nightly-2020-12-29
 ```
 
-And then build the backend with:
+And `zenohd` version corresponds to an un-released commit with id `1f20c86`. Update the `zenoh` dependency in Cargo.lock with this command:
+```bash
+$ cargo update -p zenoh --precise 1f20c86
+```
 
+Then build the backend with:
 ```bash
 $ cargo build --release --all-targets
 ```
