@@ -3417,6 +3417,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "zenoh-plugin-webserver"
+version = "0.7.0-rc"
+dependencies = [
+ "anyhow",
+ "async-std",
+ "env_logger",
+ "futures",
+ "git-version",
+ "lazy_static",
+ "log",
+ "rustc_version 0.4.0",
+ "serde",
+ "serde_json",
+ "tide",
+ "zenoh",
+ "zenoh-core",
+ "zenoh-plugin-trait",
+]
+
+[[package]]
 name = "zenoh-protocol"
 version = "0.7.0-rc"
 source = "git+https://github.com/eclipse-zenoh/zenoh.git?branch=master#c944ebb1f690f835a706b7a80b08335501eb9c35"
@@ -3508,26 +3528,6 @@ dependencies = [
  "zenoh-core",
  "zenoh-crypto",
  "zenoh-sync",
-]
-
-[[package]]
-name = "zenoh_plugin_webserver"
-version = "0.6.0-beta.1"
-dependencies = [
- "anyhow",
- "async-std",
- "env_logger",
- "futures",
- "git-version",
- "lazy_static",
- "log",
- "rustc_version 0.4.0",
- "serde",
- "serde_json",
- "tide",
- "zenoh",
- "zenoh-core",
- "zenoh-plugin-trait",
 ]
 
 [[package]]
