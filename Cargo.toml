@@ -12,8 +12,10 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-name = "zenoh_plugin_webserver"
-version = "0.6.0-beta.1"
+name = "zenoh-plugin-webserver"
+version = "0.7.0-rc"
+repository = "https://github.com/eclipse-zenoh/zenoh-plugin-webserver"
+homepage = "http://zenoh.io"
 authors = [
   "kydos <angelo@icorsaro.net>",
   "Julien Enoch <julien@enoch.fr>",
@@ -22,10 +24,13 @@ authors = [
   "Pierre Avital <pierre.avital@adlinktech.com>",
 ]
 edition = "2018"
+license = " EPL-2.0 OR Apache-2.0"
+categories = ["network-programming", "web-programming::http-server"]
+description = "Plugin for Zenoh implementing an HTTP server that maps URLs to zenoh key expressions"
 
 [lib]
 name = "zplugin_webserver"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [features]
 no_mangle = ["zenoh-plugin-trait/no_mangle"]
@@ -34,7 +39,7 @@ default = ["no_mangle"]
 [dependencies]
 anyhow = "1.0.65"
 async-std = "=1.12.0"
-env_logger = "0.9.1"
+env_logger = "0.10.0"
 futures = "0.3.24"
 git-version = "0.3.5"
 lazy_static = "1.4.0"
@@ -57,4 +62,4 @@ maintainer = "zenoh-dev@eclipse.org"
 copyright = "2017, 2022 ZettaScale Technology"
 section = "net"
 license-file = ["LICENSE", "0"]
-depends = "zenohd (=0.6.0~dev.0)"
+depends = "zenohd (=0.7.0-rc)"
