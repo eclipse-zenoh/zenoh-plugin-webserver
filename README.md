@@ -20,7 +20,7 @@ The Web Server plugin implements an HTTP server mapping URLs to zenoh keys.
 This plugin can be used to set-up a Web server where the resources are retrieved from geo-distributed
 zenoh storages, each leveraging various backends (file system, database, memory...).
 
-**Library name** `zplugin_webserver`
+**Library name** `zenoh_plugin_webserver`
 
 :point_right: **Download stable versions:** https://download.eclipse.org/zenoh/zenoh-plugin-webserver/
 
@@ -97,7 +97,7 @@ In its configuration part, the plugin supports those settings:
 ### *Address already in use*
 If in `zenohd` logs you see such error log at startup:
 ```
-[2021-04-12T14:20:51Z ERROR zplugin_webserver] Unable to start http server for REST : Os { code: 48, kind: AddrInUse, message: "Address already in use" }
+[2021-04-12T14:20:51Z ERROR zenoh_plugin_webserver] Unable to start http server for REST : Os { code: 48, kind: AddrInUse, message: "Address already in use" }
 ```
 It means another process is already using this port number that the webserver plugin would like to use.
 In such case, you have 2 solutions:
@@ -107,7 +107,7 @@ In such case, you have 2 solutions:
 ### *Permission denied*
 If in `zenohd` logs you see such error log at startup:
 ```
-[2021-04-12T13:55:10Z ERROR zplugin_webserver] Unable to start http server for REST : Os { code: 13, kind: PermissionDenied, message: "Permission denied" 
+[2021-04-12T13:55:10Z ERROR zenoh_plugin_webserver] Unable to start http server for REST : Os { code: 13, kind: PermissionDenied, message: "Permission denied" 
 ```
 It probably means your OS (this usually happens on Linux) forbids the usage of the configured port for non-root user (actually it usually restricts all ports between 0 and 1024).
 In such case, you have 2 solutions:
