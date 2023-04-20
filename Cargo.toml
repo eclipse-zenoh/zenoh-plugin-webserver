@@ -29,7 +29,7 @@ categories = ["network-programming", "web-programming::http-server"]
 description = "Plugin for Zenoh implementing an HTTP server that maps URLs to zenoh key expressions"
 
 [lib]
-name = "zplugin_webserver"
+name = "zenoh_plugin_webserver"
 crate-type = ["cdylib", "rlib"]
 
 [features]
