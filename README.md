@@ -130,10 +130,6 @@ Otherwise, incompatibilities in memory mapping of shared types between `zenohd` 
 
 At first, install [Cargo and Rust](https://doc.rust-lang.org/cargo/getting-started/installation.html). 
 
-:warning: **WARNING** :warning: : As Rust doesn't have a stable ABI, the backend library should be
-built with the exact same Rust version than `zenohd`, and using for `zenoh` dependency the same version (or commit number) than 'zenohd'.
-Otherwise, incompatibilities in memory mapping of shared types between `zenohd` and the library can lead to a `"SIGSEV"` crash.
-
 To know the Rust version you're `zenohd` has been built with, use the `--version` option.  
 Example:
 ```bash
@@ -154,5 +150,5 @@ $ cargo update -p zenoh --precise 1f20c86
 
 Then build the backend with:
 ```bash
-$ cargo build --release --all-targets
+$ cargo build --release -p zenoh-plugin-webserver
 ```
