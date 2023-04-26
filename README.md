@@ -65,7 +65,12 @@ Here are the steps:
                 id: "fs",
                 dir: "my-site",
                 read_only: true
-    } } } } } }
+              }
+            }
+          }
+        }
+      }
+    }
     ```
  4. Start the zenoh router (`zenohd`). It will automatically load the Web Server plugin and make it available on port 8080. It will also create a storage replying to any zenoh query on key expressions starting with `my-site/`.  
  Now you can browse your site on http://localhost:8080/my-site.
