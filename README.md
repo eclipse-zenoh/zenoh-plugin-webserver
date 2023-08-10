@@ -128,7 +128,11 @@ In such case, you have 2 solutions:
 built with the exact same Rust version than `zenohd`, and using for `zenoh` dependency the same version (or commit number) than 'zenohd'.
 Otherwise, incompatibilities in memory mapping of shared types between `zenohd` and the library can lead to a `"SIGSEV"` crash.
 
-At first, install [Cargo and Rust](https://doc.rust-lang.org/cargo/getting-started/installation.html). 
+At first, install [Cargo and Rust](https://doc.rust-lang.org/cargo/getting-started/installation.html). If you already have the Rust toolchain installed, make sure it is up-to-date with:
+
+```bash
+$ rustup update
+```
 
 To know the Rust version you're `zenohd` has been built with, use the `--version` option.  
 Example:
