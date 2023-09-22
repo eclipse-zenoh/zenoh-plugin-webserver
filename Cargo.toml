@@ -35,6 +35,7 @@ crate-type = ["cdylib", "rlib"]
 [features]
 default = ["no_mangle"]
 no_mangle = ["zenoh-plugin-trait/no_mangle"]
+stats = ["zenoh/stats"]
 
 [dependencies]
 anyhow = "1.0.69"
