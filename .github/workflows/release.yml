@@ -172,7 +172,6 @@ jobs:
         with:
           toolchain: stable
           target: ${{ matrix.job.target }}
-          override: true
           profile: minimal
 
       - name: Build
