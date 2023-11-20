@@ -45,7 +45,7 @@ impl Plugin for WebServerPlugin {
     type RunningPlugin = RunningPlugin;
 
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<RunningPlugin> {
-        env_logger::init();
+        let _ = env_logger::try_init();
         let runtime_conf = runtime.config.lock();
         let plugin_conf = runtime_conf
             .plugin(name)
