@@ -23,6 +23,9 @@ const DEFAULT_HTTP_INTERFACE: &str = "0.0.0.0";
 pub(crate) struct Config {
     #[serde(deserialize_with = "deserialize_http_port")]
     pub(crate) http_port: String,
+    __required__: Option<bool>,
+    #[serde(default, deserialize_with = "deserialize_path")]
+    __path__: Option<Vec<String>>,
 }
 
 fn deserialize_http_port<'de, D>(deserializer: D) -> Result<String, D::Error>
@@ -65,5 +68,68 @@ impl<'de> Visitor<'de> for HttpPortVisitor {
             return Err(E::invalid_value(Unexpected::Str(port), &self));
         }
         Ok(format!("{interface}:{port}"))
+    }
+}
+
+fn deserialize_path<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    deserializer.deserialize_option(OptPathVisitor)
+}
+
+struct OptPathVisitor;
+
+impl<'de> serde::de::Visitor<'de> for OptPathVisitor {
+    type Value = Option<Vec<String>>;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(formatter, "none or a string or an array of strings")
+    }
+
+    fn visit_none<E>(self) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(None)
+    }
+
+    fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_any(PathVisitor).map(Some)
+    }
+}
+
+struct PathVisitor;
+
+impl<'de> serde::de::Visitor<'de> for PathVisitor {
+    type Value = Vec<String>;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(formatter, "a string or an array of strings")
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(vec![v.into()])
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: de::SeqAccess<'de>,
+    {
+        let mut v = if let Some(l) = seq.size_hint() {
+            Vec::with_capacity(l)
+        } else {
+            Vec::new()
+        };
+        while let Some(s) = seq.next_element()? {
+            v.push(s);
+        }
+        Ok(v)
     }
 }
