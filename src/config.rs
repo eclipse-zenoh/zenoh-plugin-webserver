@@ -133,3 +133,78 @@ impl<'de> serde::de::Visitor<'de> for PathVisitor {
         Ok(v)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{Config, DEFAULT_HTTP_INTERFACE};
+
+    #[test]
+    fn test_path_field() {
+        // See: https://github.com/eclipse-zenoh/zenoh-plugin-webserver/issues/19
+        let config =
+            serde_json::from_str::<Config>(r#"{"__path__": "/example/path", "http_port": 8080}"#);
+
+        assert!(config.is_ok());
+        let Config {
+            http_port,
+            __required__,
+            __path__,
+        } = config.unwrap();
+
+        assert_eq!(http_port, format!("{DEFAULT_HTTP_INTERFACE}:8080"));
+        assert_eq!(__path__, Some(vec![String::from("/example/path")]));
+        assert_eq!(__required__, None);
+    }
+
+    #[test]
+    fn test_required_field() {
+        // See: https://github.com/eclipse-zenoh/zenoh-plugin-webserver/issues/19
+        let config = serde_json::from_str::<Config>(r#"{"__required__": true, "http_port": 8080}"#);
+        assert!(config.is_ok());
+        let Config {
+            http_port,
+            __required__,
+            __path__,
+        } = config.unwrap();
+
+        assert_eq!(http_port, format!("{DEFAULT_HTTP_INTERFACE}:8080"));
+        assert_eq!(__path__, None);
+        assert_eq!(__required__, Some(true));
+    }
+
+    #[test]
+    fn test_path_field_and_required_field() {
+        // See: https://github.com/eclipse-zenoh/zenoh-plugin-webserver/issues/19
+        let config = serde_json::from_str::<Config>(
+            r#"{"__path__": "/example/path", "__required__": true, "http_port": 8080}"#,
+        );
+
+        assert!(config.is_ok());
+        let Config {
+            http_port,
+            __required__,
+            __path__,
+        } = config.unwrap();
+
+        assert_eq!(http_port, format!("{DEFAULT_HTTP_INTERFACE}:8080"));
+        assert_eq!(__path__, Some(vec![String::from("/example/path")]));
+        assert_eq!(__required__, Some(true));
+    }
+
+    #[test]
+    fn test_no_path_field_and_no_required_field() {
+        // See: https://github.com/eclipse-zenoh/zenoh-plugin-webserver/issues/19
+        let config = serde_json::from_str::<Config>(r#"{"http_port": 8080}"#);
+
+        assert!(config.is_ok());
+        let Config {
+            http_port,
+            __required__,
+            __path__,
+        } = config.unwrap();
+
+        assert_eq!(http_port, format!("{DEFAULT_HTTP_INTERFACE}:8080"));
+        assert_eq!(__path__, None);
+        assert_eq!(__required__, None);
+    }
+}
