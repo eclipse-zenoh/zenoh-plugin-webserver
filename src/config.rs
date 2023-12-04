@@ -23,6 +23,9 @@ const DEFAULT_HTTP_INTERFACE: &str = "0.0.0.0";
 pub(crate) struct Config {
     #[serde(deserialize_with = "deserialize_http_port")]
     pub(crate) http_port: String,
+    __required__: Option<bool>,
+    #[serde(default, deserialize_with = "deserialize_path")]
+    __path__: Option<Vec<String>>,
 }
 
 fn deserialize_http_port<'de, D>(deserializer: D) -> Result<String, D::Error>
@@ -65,5 +68,143 @@ impl<'de> Visitor<'de> for HttpPortVisitor {
             return Err(E::invalid_value(Unexpected::Str(port), &self));
         }
         Ok(format!("{interface}:{port}"))
+    }
+}
+
+fn deserialize_path<'de, D>(deserializer: D) -> Result<Option<Vec<String>>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    deserializer.deserialize_option(OptPathVisitor)
+}
+
+struct OptPathVisitor;
+
+impl<'de> serde::de::Visitor<'de> for OptPathVisitor {
+    type Value = Option<Vec<String>>;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(formatter, "none or a string or an array of strings")
+    }
+
+    fn visit_none<E>(self) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(None)
+    }
+
+    fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_any(PathVisitor).map(Some)
+    }
+}
+
+struct PathVisitor;
+
+impl<'de> serde::de::Visitor<'de> for PathVisitor {
+    type Value = Vec<String>;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(formatter, "a string or an array of strings")
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(vec![v.into()])
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: de::SeqAccess<'de>,
+    {
+        let mut v = if let Some(l) = seq.size_hint() {
+            Vec::with_capacity(l)
+        } else {
+            Vec::new()
+        };
+        while let Some(s) = seq.next_element()? {
+            v.push(s);
+        }
+        Ok(v)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Config, DEFAULT_HTTP_INTERFACE};
+
+    #[test]
+    fn test_path_field() {
+        // See: https://github.com/eclipse-zenoh/zenoh-plugin-webserver/issues/19
+        let config =
+            serde_json::from_str::<Config>(r#"{"__path__": "/example/path", "http_port": 8080}"#);
+
+        assert!(config.is_ok());
+        let Config {
+            http_port,
+            __required__,
+            __path__,
+        } = config.unwrap();
+
+        assert_eq!(http_port, format!("{DEFAULT_HTTP_INTERFACE}:8080"));
+        assert_eq!(__path__, Some(vec![String::from("/example/path")]));
+        assert_eq!(__required__, None);
+    }
+
+    #[test]
+    fn test_required_field() {
+        // See: https://github.com/eclipse-zenoh/zenoh-plugin-webserver/issues/19
+        let config = serde_json::from_str::<Config>(r#"{"__required__": true, "http_port": 8080}"#);
+        assert!(config.is_ok());
+        let Config {
+            http_port,
+            __required__,
+            __path__,
+        } = config.unwrap();
+
+        assert_eq!(http_port, format!("{DEFAULT_HTTP_INTERFACE}:8080"));
+        assert_eq!(__path__, None);
+        assert_eq!(__required__, Some(true));
+    }
+
+    #[test]
+    fn test_path_field_and_required_field() {
+        // See: https://github.com/eclipse-zenoh/zenoh-plugin-webserver/issues/19
+        let config = serde_json::from_str::<Config>(
+            r#"{"__path__": "/example/path", "__required__": true, "http_port": 8080}"#,
+        );
+
+        assert!(config.is_ok());
+        let Config {
+            http_port,
+            __required__,
+            __path__,
+        } = config.unwrap();
+
+        assert_eq!(http_port, format!("{DEFAULT_HTTP_INTERFACE}:8080"));
+        assert_eq!(__path__, Some(vec![String::from("/example/path")]));
+        assert_eq!(__required__, Some(true));
+    }
+
+    #[test]
+    fn test_no_path_field_and_no_required_field() {
+        // See: https://github.com/eclipse-zenoh/zenoh-plugin-webserver/issues/19
+        let config = serde_json::from_str::<Config>(r#"{"http_port": 8080}"#);
+
+        assert!(config.is_ok());
+        let Config {
+            http_port,
+            __required__,
+            __path__,
+        } = config.unwrap();
+
+        assert_eq!(http_port, format!("{DEFAULT_HTTP_INTERFACE}:8080"));
+        assert_eq!(__path__, None);
+        assert_eq!(__required__, None);
     }
 }
