@@ -1,4 +1,4 @@
-<img src="https://raw.githubusercontent.com/eclipse-zenoh/zenoh/master/zenoh-dragon.png" height="150">
+<img src="https://raw.githubusercontent.com/eclipse-zenoh/zenoh/main/zenoh-dragon.png" height="150">
 
 [![CI](https://github.com/eclipse-zenoh/zenoh-plugin-webserver/workflows/CI/badge.svg)](https://github.com/eclipse-zenoh/zenoh-plugin-webserver/actions?query=workflow%3A%22CI%22)
 [![Discussion](https://img.shields.io/badge/discussion-on%20github-blue)](https://github.com/eclipse-zenoh/roadmap/discussions)
@@ -24,11 +24,11 @@ zenoh storages, each leveraging various backends (file system, database, memory.
 
 :point_right: **Download stable versions:** https://download.eclipse.org/zenoh/zenoh-plugin-webserver/
 
-:point_right: **Build "master" branch:** see [below](#How-to-build-it)
+:point_right: **Build "main" branch:** see [below](#How-to-build-it)
 
 -------------------------------
 ## :warning: Documentation for previous 0.5 versions:
-The following documentation related to the version currently in development in "master" branch: 0.6.x.
+The following documentation related to the version currently in development in "main" branch: 0.6.x.
 
 For previous versions see the README and code of the corresponding tagged version:
  - [0.5.0-beta.9](https://github.com/eclipse-zenoh/zenoh-plugin-webserver/tree/0.5.0-beta.9#readme)
@@ -86,8 +86,8 @@ For more advanced use cases you can also:
    (List of available backends [here](http://zenoh.io/docs/manual/backends-list/)).
  - Deploy a zenoh application that will implement `eval` function for a resource, replying to requests with a
    dynamic content (see the `z_eval` example in
-   [Rust](https://github.com/eclipse-zenoh/zenoh/blob/master/zenoh/examples/zenoh/z_eval.rs) or
-   [Python](https://github.com/eclipse-zenoh/zenoh-python/blob/master/examples/zenoh/z_eval.py)).
+   [Rust](https://github.com/eclipse-zenoh/zenoh/blob/main/zenoh/examples/zenoh/z_eval.rs) or
+   [Python](https://github.com/eclipse-zenoh/zenoh-python/blob/main/examples/zenoh/z_eval.py)).
 
 -------------------------------
 ## **Configuration**
