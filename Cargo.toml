@@ -34,7 +34,7 @@ crate-type = ["cdylib", "rlib"]
 
 [features]
 default = ["no_mangle"]
-no_mangle = ["zenoh-plugin-trait/no_mangle"]
+no_mangle = []
 stats = ["zenoh/stats"]
 
 [dependencies]
@@ -48,11 +48,11 @@ log = "0.4.17"
 serde = "1.0.154"
 serde_json = "1.0.94"
 tide = "0.16.0"
-zenoh = { version = "0.11.0-dev", git = "https://github.com/eclipse-zenoh/zenoh.git", branch = "master", features = [
+zenoh = { git = "https://github.com/eclipse-zenoh/zenoh.git", branch = "simplified_load_plugin", features = [
   "unstable",
 ] }
-zenoh-core = { version = "0.11.0-dev", git = "https://github.com/eclipse-zenoh/zenoh.git", branch = "master" }
-zenoh-plugin-trait = { version = "0.11.0-dev", git = "https://github.com/eclipse-zenoh/zenoh.git", branch = "master", default-features = false }
+zenoh-core = { git = "https://github.com/eclipse-zenoh/zenoh.git", branch = "simplified_load_plugin" }
+zenoh-plugin-trait = { git = "https://github.com/eclipse-zenoh/zenoh.git", branch = "simplified_load_plugin", default-features = false }
 
 [build-dependencies]
 rustc_version = "0.4.0"
