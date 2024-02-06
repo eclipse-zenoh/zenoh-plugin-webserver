@@ -64,6 +64,7 @@ impl Plugin for WebServerPlugin {
 
 impl RunningPluginTrait for WebServerPlugin {}
 
+#[cfg(feature = "no_mangle")]
 zenoh_plugin_trait::declare_plugin!(WebServerPlugin);
 
 async fn run(runtime: Runtime, conf: Config) {
