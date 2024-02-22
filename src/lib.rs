@@ -21,32 +21,37 @@ use std::str::FromStr;
 use tide::http::Mime;
 use tide::{Request, Response, Server, StatusCode};
 use zenoh::buffers::ZBuf;
-use zenoh::plugins::{Plugin, RunningPlugin, RunningPluginTrait, Runtime, ZenohPlugin};
+use zenoh::plugins::{RunningPlugin, RunningPluginTrait, ZenohPlugin};
 use zenoh::query::Reply;
+use zenoh::runtime::Runtime;
 use zenoh::Result as ZResult;
 use zenoh::{prelude::r#async::*, Session};
 use zenoh_core::{bail, zerror};
+use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 
 mod config;
 use config::Config;
 
 const DEFAULT_DIRECTORY_INDEX: &str = "index.html";
 
-const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
 lazy_static::lazy_static! {
-    static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
     static ref DEFAULT_MIME: Mime = Mime::from_str(KnownEncoding::AppOctetStream.into()).unwrap();
 }
-
 pub struct WebServerPlugin;
+impl PluginControl for WebServerPlugin {}
 impl ZenohPlugin for WebServerPlugin {}
+
 impl Plugin for WebServerPlugin {
     type StartArgs = Runtime;
-    type RunningPlugin = RunningPlugin;
+    type Instance = RunningPlugin;
+
+    const DEFAULT_NAME: &'static str = "zenoh-plugin-webserver";
+    const PLUGIN_VERSION: &'static str = plugin_version!();
+    const PLUGIN_LONG_VERSION: &'static str = plugin_long_version!();
 
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<RunningPlugin> {
         let _ = env_logger::try_init();
-        let runtime_conf = runtime.config.lock();
+        let runtime_conf = runtime.config().lock();
         let plugin_conf = runtime_conf
             .plugin(name)
             .ok_or_else(|| zerror!("Plugin `{}`: missing config", name))?;
@@ -55,31 +60,15 @@ impl Plugin for WebServerPlugin {
         async_std::task::spawn(run(runtime.clone(), conf));
         Ok(Box::new(WebServerPlugin))
     }
-
-    const STATIC_NAME: &'static str = "webserver";
-}
-impl RunningPluginTrait for WebServerPlugin {
-    fn config_checker(&self) -> zenoh::plugins::ValidationFunction {
-        Arc::new(|name, _, _| {
-            bail!(
-                "Plugin `{}` doesn't support hot configuration changes",
-                name
-            )
-        })
-    }
-    fn adminspace_getter<'a>(
-        &'a self,
-        _selector: &'a Selector<'a>,
-        _plugin_status_key: &str,
-    ) -> ZResult<Vec<zenoh::plugins::Response>> {
-        Ok(Vec::new())
-    }
 }
 
+impl RunningPluginTrait for WebServerPlugin {}
+
+#[cfg(feature = "no_mangle")]
 zenoh_plugin_trait::declare_plugin!(WebServerPlugin);
 
 async fn run(runtime: Runtime, conf: Config) {
-    debug!("WebServer plugin {}", LONG_VERSION.as_str());
+    debug!("WebServer plugin {}", WebServerPlugin::PLUGIN_LONG_VERSION);
 
     let zenoh = match zenoh::init(runtime).res().await {
         Ok(session) => Arc::new(session),
