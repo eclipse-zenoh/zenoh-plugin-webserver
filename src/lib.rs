@@ -15,11 +15,11 @@
 use async_std::prelude::FutureExt;
 use async_std::sync::Arc;
 use futures::TryStreamExt;
-use log::debug;
 use std::convert::TryFrom;
 use std::str::FromStr;
 use tide::http::Mime;
 use tide::{Request, Response, Server, StatusCode};
+use tracing::debug;
 use zenoh::buffers::ZBuf;
 use zenoh::plugins::{RunningPlugin, RunningPluginTrait, ZenohPlugin};
 use zenoh::query::Reply;
@@ -50,7 +50,7 @@ impl Plugin for WebServerPlugin {
     const PLUGIN_LONG_VERSION: &'static str = plugin_long_version!();
 
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<RunningPlugin> {
-        let _ = env_logger::try_init();
+        zenoh_util::init_log();
         let runtime_conf = runtime.config().lock();
         let plugin_conf = runtime_conf
             .plugin(name)
@@ -73,7 +73,7 @@ async fn run(runtime: Runtime, conf: Config) {
     let zenoh = match zenoh::init(runtime).res().await {
         Ok(session) => Arc::new(session),
         Err(e) => {
-            log::error!("Unable to init zenoh session for WebServer plugin : {}", e);
+            tracing::error!("Unable to init zenoh session for WebServer plugin : {}", e);
             return;
         }
     };
@@ -84,7 +84,7 @@ async fn run(runtime: Runtime, conf: Config) {
     app.at("*").get(handle_request);
 
     if let Err(e) = app.listen(conf.http_port).await {
-        log::error!("Unable to start http server for WebServer plugin : {}", e);
+        tracing::error!("Unable to start http server for WebServer plugin : {}", e);
     }
 }
 
@@ -93,7 +93,7 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
 
     // Reconstruct Selector from req.url() (no easier way...)
     let url = req.url();
-    log::debug!("GET on {}", url);
+    tracing::debug!("GET on {}", url);
 
     // Build corresponding Selector
     let path = url.path();
@@ -123,10 +123,10 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
                 .map(|m| m.get("_method").map(|x| x.as_ref()) == Some("SUB"))
                 .unwrap_or(false)
             {
-                log::debug!("Subscribe to {} for Multipart stream", selector.key_expr,);
+                tracing::debug!("Subscribe to {} for Multipart stream", selector.key_expr,);
                 let (sender, receiver) = async_std::channel::bounded(1);
                 async_std::task::spawn(async move {
-                    log::debug!(
+                    tracing::debug!(
                         "Subscribe to {} for Multipart stream (task {})",
                         selector.key_expr,
                         async_std::task::current().id()
@@ -151,23 +151,23 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
                         {
                             Ok(Ok(_)) => {}
                             Ok(Err(e)) => {
-                                log::debug!(
+                                tracing::debug!(
                                     "Multipart error ({})! Unsubscribe and terminate (task {})",
                                     e,
                                     async_std::task::current().id()
                                 );
                                 if let Err(e) = sub.undeclare().res().await {
-                                    log::error!("Error undeclaring subscriber: {}", e);
+                                    tracing::error!("Error undeclaring subscriber: {}", e);
                                 }
                                 break;
                             }
                             Err(_) => {
-                                log::debug!(
+                                tracing::debug!(
                                     "Multipart timeout! Unsubscribe and terminate (task {})",
                                     async_std::task::current().id()
                                 );
                                 if let Err(e) = sub.undeclare().res().await {
-                                    log::error!("Error undeclaring subscriber: {}", e);
+                                    tracing::error!("Error undeclaring subscriber: {}", e);
                                 }
                                 break;
                             }
