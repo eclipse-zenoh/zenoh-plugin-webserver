@@ -50,7 +50,7 @@ impl Plugin for WebServerPlugin {
     const PLUGIN_LONG_VERSION: &'static str = plugin_long_version!();
 
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<RunningPlugin> {
-        zenoh_util::init_log();
+        zenoh_util::init_log_from_env();
         let runtime_conf = runtime.config().lock();
         let plugin_conf = runtime_conf
             .plugin(name)
