@@ -1,41 +1,31 @@
-#
-# Copyright (c) 2022 ZettaScale Technology
-#
-# This program and the accompanying materials are made available under the
-# terms of the Eclipse Public License 2.0 which is available at
-# http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
-# which is available at https://www.apache.org/licenses/LICENSE-2.0.
-#
-# SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
-#
-# Contributors:
-#   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
-#
 [package]
 name = "zenoh-plugin-webserver"
-version = "0.11.0-dev"
+version = "0.11.0-dev-71-g579bd68"
 repository = "https://github.com/eclipse-zenoh/zenoh-plugin-webserver"
 homepage = "http://zenoh.io"
-authors = [
-  "kydos <angelo@icorsaro.net>",
-  "Julien Enoch <julien@enoch.fr>",
-  "Olivier Hécart <olivier.hecart@adlinktech.com>",
-  "Luca Cominardi <luca.cominardi@gmail.com>",
-  "Pierre Avital <pierre.avital@adlinktech.com>",
-]
+authors = [ "kydos <angelo@icorsaro.net>", "Julien Enoch <julien@enoch.fr>", "Olivier Hécart <olivier.hecart@adlinktech.com>", "Luca Cominardi <luca.cominardi@gmail.com>", "Pierre Avital <pierre.avital@adlinktech.com>" ]
 edition = "2021"
 license = "EPL-2.0 OR Apache-2.0"
-categories = ["network-programming", "web-programming::http-server"]
+categories = [ "network-programming", "web-programming::http-server" ]
 description = "Plugin for Zenoh implementing an HTTP server that maps URLs to zenoh key expressions"
+
+[package.metadata]
+[package.metadata.deb]
+name = "zenoh-plugin-webserver"
+maintainer = "zenoh-dev@eclipse.org"
+copyright = "2017, 2022 ZettaScale Technology"
+section = "net"
+license-file = [ "LICENSE", "0" ]
+depends = "zenohd (=0.11.0-dev-1)"
 
 [lib]
 name = "zenoh_plugin_webserver"
-crate-type = ["cdylib", "rlib"]
+crate-type = [ "cdylib", "rlib" ]
 
 [features]
-default = ["no_mangle"]
+default = [ "no_mangle" ]
 no_mangle = []
-stats = ["zenoh/stats"]
+stats = [ "zenoh/stats" ]
 
 [dependencies]
 anyhow = "1.0.69"
@@ -48,19 +38,23 @@ log = "0.4.17"
 serde = "1.0.154"
 serde_json = "1.0.94"
 tide = "0.16.0"
-zenoh = { version = "0.11.0-dev", git = "https://github.com/eclipse-zenoh/zenoh.git", branch = "main", features = [
-  "unstable",
-] }
-zenoh-core = { version = "0.11.0-dev", git = "https://github.com/eclipse-zenoh/zenoh.git", branch = "main" }
-zenoh-plugin-trait = { version = "0.11.0-dev", git = "https://github.com/eclipse-zenoh/zenoh.git", branch = "main", default-features = false }
+
+[dependencies.zenoh]
+version = "0.11.0-dev"
+git = "https://github.com/eclipse-zenoh/zenoh.git"
+branch = "main"
+features = [ "unstable" ]
+
+[dependencies.zenoh-core]
+version = "0.11.0-dev"
+git = "https://github.com/eclipse-zenoh/zenoh.git"
+branch = "main"
+
+[dependencies.zenoh-plugin-trait]
+version = "0.11.0-dev"
+git = "https://github.com/eclipse-zenoh/zenoh.git"
+branch = "main"
+default-features = false
 
 [build-dependencies]
 rustc_version = "0.4.0"
-
-[package.metadata.deb]
-name = "zenoh-plugin-webserver"
-maintainer = "zenoh-dev@eclipse.org"
-copyright = "2017, 2022 ZettaScale Technology"
-section = "net"
-license-file = ["LICENSE", "0"]
-depends = "zenohd (=0.11.0-dev-1)"
