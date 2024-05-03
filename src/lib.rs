@@ -64,7 +64,7 @@ impl Plugin for WebServerPlugin {
 
 impl RunningPluginTrait for WebServerPlugin {}
 
-#[cfg(feature = "no_mangle")]
+#[cfg(feature = "dynamic_plugin")]
 zenoh_plugin_trait::declare_plugin!(WebServerPlugin);
 
 async fn run(runtime: Runtime, conf: Config) {
