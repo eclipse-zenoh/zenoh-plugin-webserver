@@ -33,8 +33,8 @@ name = "zenoh_plugin_webserver"
 crate-type = ["cdylib", "rlib"]
 
 [features]
-default = ["no_mangle"]
-no_mangle = []
+default = ["dynamic_plugin"]
+dynamic_plugin = []
 stats = ["zenoh/stats"]
 
 [dependencies]
