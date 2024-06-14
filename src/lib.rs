@@ -15,17 +15,20 @@
 use async_std::prelude::FutureExt;
 use async_std::sync::Arc;
 use futures::TryStreamExt;
-use std::convert::TryFrom;
+use std::borrow::Cow;
+use std::collections::HashMap;
 use std::str::FromStr;
 use tide::http::Mime;
 use tide::{Request, Response, Server, StatusCode};
 use tracing::debug;
-use zenoh::buffers::ZBuf;
-use zenoh::plugins::{RunningPlugin, RunningPluginTrait, ZenohPlugin};
-use zenoh::query::Reply;
-use zenoh::runtime::Runtime;
+use zenoh::bytes::ZBytes;
+use zenoh::encoding::Encoding;
+use zenoh::internal::plugins::{RunningPlugin, RunningPluginTrait, ZenohPlugin};
+use zenoh::internal::runtime::Runtime;
+use zenoh::sample::Sample;
+use zenoh::selector::Selector;
 use zenoh::Result as ZResult;
-use zenoh::{prelude::r#async::*, Session};
+use zenoh::{prelude::*, Session};
 use zenoh_core::{bail, zerror};
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 
@@ -35,7 +38,7 @@ use config::Config;
 const DEFAULT_DIRECTORY_INDEX: &str = "index.html";
 
 lazy_static::lazy_static! {
-    static ref DEFAULT_MIME: Mime = Mime::from_str(KnownEncoding::AppOctetStream.into()).unwrap();
+    static ref DEFAULT_MIME: Mime = Mime::from_str(&Encoding::APPLICATION_OCTET_STREAM.to_string()).unwrap();
 }
 pub struct WebServerPlugin;
 impl PluginControl for WebServerPlugin {}
@@ -70,7 +73,7 @@ zenoh_plugin_trait::declare_plugin!(WebServerPlugin);
 async fn run(runtime: Runtime, conf: Config) {
     debug!("WebServer plugin {}", WebServerPlugin::PLUGIN_LONG_VERSION);
 
-    let zenoh = match zenoh::init(runtime).res().await {
+    let zenoh = match zenoh::session::init(runtime).await {
         Ok(session) => Arc::new(session),
         Err(e) => {
             tracing::error!("Unable to init zenoh session for WebServer plugin : {}", e);
@@ -117,11 +120,10 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
     }
     match Selector::try_from(selector) {
         Ok(selector) => {
-            if selector
-                .parameters_cowmap()
-                .ok()
-                .map(|m| m.get("_method").map(|x| x.as_ref()) == Some("SUB"))
-                .unwrap_or(false)
+            if HashMap::<&str, &str>::from(&selector.parameters.clone().into_owned())
+                .get("_method")
+                .map(|x| x.as_ref())
+                == Some("SUB")
             {
                 tracing::debug!("Subscribe to {} for Multipart stream", selector.key_expr,);
                 let (sender, receiver) = async_std::channel::bounded(1);
@@ -133,16 +135,15 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
                     );
                     let sub = req
                         .state()
-                        .declare_subscriber(&selector.key_expr)
-                        .res_async()
+                        .declare_subscriber(&selector.key_expr.into_owned())
                         .await
                         .unwrap();
                     loop {
                         let sample = sub.recv_async().await.unwrap();
                         let mut buf = "--boundary\nContent-Type: ".as_bytes().to_vec();
-                        buf.extend_from_slice(sample.value.encoding.to_string().as_bytes());
+                        buf.extend_from_slice(sample.encoding().to_string().as_bytes());
                         buf.extend_from_slice("\n\n".as_bytes());
-                        buf.extend_from_slice(sample.value.payload.contiguous().as_ref());
+                        buf.extend_from_slice(&sample.payload().into::<Cow<[u8]>>());
 
                         match sender
                             .send(Ok(buf))
@@ -156,7 +157,7 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
                                     e,
                                     async_std::task::current().id()
                                 );
-                                if let Err(e) = sub.undeclare().res().await {
+                                if let Err(e) = sub.undeclare().await {
                                     tracing::error!("Error undeclaring subscriber: {}", e);
                                 }
                                 break;
@@ -166,7 +167,7 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
                                     "Multipart timeout! Unsubscribe and terminate (task {})",
                                     async_std::task::current().id()
                                 );
-                                if let Err(e) = sub.undeclare().res().await {
+                                if let Err(e) = sub.undeclare().await {
                                     tracing::error!("Error undeclaring subscriber: {}", e);
                                 }
                                 break;
@@ -182,7 +183,7 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
                 Ok(res)
             } else {
                 match zenoh_get(session, &selector).await {
-                    Ok(Some(value)) => Ok(response_with_value(value)),
+                    Ok(Some(sample)) => Ok(response_with_value(sample)),
                     Ok(None) => {
                         // Check if considering the URL as a directory, there is an existing "URL/DirectoryIndex" resource
                         let mut new_selector = selector.key_expr.as_str().to_string();
@@ -210,22 +211,21 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
     }
 }
 
-async fn zenoh_get(session: &Session, selector: &Selector<'_>) -> ZResult<Option<Value>> {
-    let replies = session.get(selector).res().await?;
+async fn zenoh_get(session: &Session, selector: &Selector<'_>) -> ZResult<Option<Sample>> {
+    let replies = session.get(selector).await?;
     match replies.recv_async().await {
-        Ok(Reply {
-            sample: Ok(sample), ..
-        }) => Ok(Some(sample.value)),
-        Ok(Reply {
-            sample: Err(value), ..
-        }) => bail!("Zenoh get on {} returned the error: {}", selector, value),
+        Ok(reply) => match reply.result() {
+            Ok(sample) => Ok(Some(sample.to_owned())),
+            Err(err) => bail!("Zenoh get on {} returned the error: {:?}", selector, err),
+        },
         Err(_) => Ok(None),
     }
 }
 
-fn response_with_value(value: Value) -> Response {
-    let mime = Mime::from_str(&value.encoding.to_string()).unwrap_or_else(|_| DEFAULT_MIME.clone());
-    response_ok(mime, value.payload)
+fn response_with_value(sample: Sample) -> Response {
+    let mime =
+        Mime::from_str(&sample.encoding().to_string()).unwrap_or_else(|_| DEFAULT_MIME.clone());
+    response_ok(mime, sample.payload())
 }
 
 fn bad_request(body: &str) -> Response {
@@ -252,9 +252,9 @@ fn redirect(url: &str) -> Response {
     res
 }
 
-fn response_ok(content_type: Mime, payload: ZBuf) -> Response {
+fn response_ok(content_type: Mime, payload: &ZBytes) -> Response {
     let mut res = Response::new(StatusCode::Ok);
     res.set_content_type(content_type);
-    res.set_body(&*payload.contiguous());
+    res.set_body(payload.into::<Cow<[u8]>>().as_ref());
     res
 }
