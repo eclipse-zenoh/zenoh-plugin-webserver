@@ -21,15 +21,20 @@ use std::str::FromStr;
 use tide::http::Mime;
 use tide::{Request, Response, Server, StatusCode};
 use tracing::debug;
-use zenoh::bytes::ZBytes;
-use zenoh::encoding::Encoding;
-use zenoh::internal::plugins::{RunningPlugin, RunningPluginTrait, ZenohPlugin};
-use zenoh::internal::runtime::Runtime;
-use zenoh::sample::Sample;
-use zenoh::selector::Selector;
-use zenoh::Result as ZResult;
-use zenoh::{prelude::*, Session};
-use zenoh_core::{bail, zerror};
+use zenoh::{
+    bytes::ZBytes,
+    encoding::Encoding,
+    internal::{
+        bail,
+        plugins::{RunningPlugin, RunningPluginTrait, ZenohPlugin},
+        runtime::Runtime,
+        zerror,
+    },
+    sample::Sample,
+    selector::Selector,
+    Result as ZResult,
+    {prelude::*, Session},
+};
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 
 mod config;
@@ -53,7 +58,7 @@ impl Plugin for WebServerPlugin {
     const PLUGIN_LONG_VERSION: &'static str = plugin_long_version!();
 
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<RunningPlugin> {
-        zenoh_util::try_init_log_from_env();
+        zenoh::try_init_log_from_env();
         let runtime_conf = runtime.config().lock();
         let plugin_conf = runtime_conf
             .plugin(name)
