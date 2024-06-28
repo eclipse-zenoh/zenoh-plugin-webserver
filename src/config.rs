@@ -12,9 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 //
-use serde::de::{Unexpected, Visitor};
-use serde::{de, Deserialize, Deserializer};
 use std::fmt;
+
+use serde::{
+    de,
+    de::{Unexpected, Visitor},
+    Deserialize, Deserializer,
+};
 
 const DEFAULT_HTTP_INTERFACE: &str = "0.0.0.0";
 
