@@ -12,28 +12,24 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use async_std::prelude::FutureExt;
-use async_std::sync::Arc;
+use std::{borrow::Cow, collections::HashMap, str::FromStr};
+
+use async_std::{prelude::FutureExt, sync::Arc};
 use futures::TryStreamExt;
-use std::borrow::Cow;
-use std::collections::HashMap;
-use std::str::FromStr;
-use tide::http::Mime;
-use tide::{Request, Response, Server, StatusCode};
+use tide::{http::Mime, Request, Response, Server, StatusCode};
 use tracing::debug;
 use zenoh::{
-    bytes::ZBytes,
-    encoding::Encoding,
+    bytes::{Encoding, ZBytes},
     internal::{
         bail,
         plugins::{RunningPlugin, RunningPluginTrait, ZenohPlugin},
         runtime::Runtime,
         zerror,
     },
+    prelude::*,
+    query::Selector,
     sample::Sample,
-    selector::Selector,
-    Result as ZResult,
-    {prelude::*, Session},
+    Result as ZResult, Session,
 };
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 
