@@ -12,11 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{borrow::Cow, collections::HashMap, str::FromStr};
+use std::{borrow::Cow, collections::HashMap, str::FromStr, sync::Arc};
 
-use async_std::{prelude::FutureExt, sync::Arc};
-use futures::TryStreamExt;
+use futures::stream::TryStreamExt;
 use tide::{http::Mime, Request, Response, Server, StatusCode};
+use tokio::runtime::Handle;
 use tracing::debug;
 use zenoh::{
     bytes::{Encoding, ZBytes},
@@ -35,6 +35,18 @@ use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginCont
 
 mod config;
 use config::Config;
+
+const WORKER_THREAD_NUM: usize = 2;
+const MAX_BLOCK_THREAD_NUM: usize = 50;
+lazy_static::lazy_static! {
+    // The global runtime is used in the zenohd case, which we can't get the current runtime
+    static ref TOKIO_RUNTIME: tokio::runtime::Runtime = tokio::runtime::Builder::new_multi_thread()
+               .worker_threads(WORKER_THREAD_NUM)
+               .max_blocking_threads(MAX_BLOCK_THREAD_NUM)
+               .enable_all()
+               .build()
+               .expect("Unable to create runtime");
+}
 
 const DEFAULT_DIRECTORY_INDEX: &str = "index.html";
 
@@ -61,7 +73,17 @@ impl Plugin for WebServerPlugin {
             .ok_or_else(|| zerror!("Plugin `{}`: missing config", name))?;
         let conf: Config = serde_json::from_value(plugin_conf.clone())
             .map_err(|e| zerror!("Plugin `{}` configuration error: {}", name, e))?;
-        async_std::task::spawn(run(runtime.clone(), conf));
+        // Check whether able to get the current runtime
+        match Handle::try_current() {
+            Ok(rt) => {
+                // Able to get the current runtime (standalone binary), spawn on the current runtime
+                rt.spawn(run(runtime.clone(), conf));
+            }
+            Err(_) => {
+                // Unable to get the current runtime (loaded in zenohd), spawn on the global runtime
+                TOKIO_RUNTIME.spawn(run(runtime.clone(), conf));
+            }
+        }
         Ok(Box::new(WebServerPlugin))
     }
 }
@@ -127,13 +149,9 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
                 == Some("SUB")
             {
                 tracing::debug!("Subscribe to {} for Multipart stream", selector.key_expr,);
-                let (sender, receiver) = async_std::channel::bounded(1);
-                async_std::task::spawn(async move {
-                    tracing::debug!(
-                        "Subscribe to {} for Multipart stream (task {})",
-                        selector.key_expr,
-                        async_std::task::current().id()
-                    );
+                let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
+                tokio::task::spawn(async move {
+                    tracing::debug!("Subscribe to {} for Multipart stream", selector.key_expr);
                     let sub = req
                         .state()
                         .declare_subscriber(&selector.key_expr.into_owned())
@@ -146,17 +164,17 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
                         buf.extend_from_slice("\n\n".as_bytes());
                         buf.extend_from_slice(&sample.payload().into::<Cow<[u8]>>());
 
-                        match sender
-                            .send(Ok(buf))
-                            .timeout(std::time::Duration::new(10, 0))
-                            .await
+                        match tokio::time::timeout(
+                            std::time::Duration::new(10, 0),
+                            sender.send(Ok(buf)),
+                        )
+                        .await
                         {
                             Ok(Ok(_)) => {}
                             Ok(Err(e)) => {
                                 tracing::debug!(
-                                    "Multipart error ({})! Unsubscribe and terminate (task {})",
-                                    e,
-                                    async_std::task::current().id()
+                                    "Multipart error ({})! Unsubscribe and terminate",
+                                    e
                                 );
                                 if let Err(e) = sub.undeclare().await {
                                     tracing::error!("Error undeclaring subscriber: {}", e);
@@ -164,10 +182,7 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
                                 break;
                             }
                             Err(_) => {
-                                tracing::debug!(
-                                    "Multipart timeout! Unsubscribe and terminate (task {})",
-                                    async_std::task::current().id()
-                                );
+                                tracing::debug!("Multipart timeout! Unsubscribe and terminate",);
                                 if let Err(e) = sub.undeclare().await {
                                     tracing::error!("Error undeclaring subscriber: {}", e);
                                 }
@@ -177,9 +192,17 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
                     }
                 });
 
+                let receiver = async_stream::stream! {
+                      while let Some(item) = receiver.recv().await {
+                          yield item;
+                      }
+                };
                 let mut res = Response::new(StatusCode::Ok);
                 res.set_content_type("multipart/x-mixed-replace; boundary=\"boundary\"");
-                res.set_body(tide::Body::from_reader(receiver.into_async_read(), None));
+                res.set_body(tide::Body::from_reader(
+                    Box::pin(receiver.into_async_read()),
+                    None,
+                ));
 
                 Ok(res)
             } else {
