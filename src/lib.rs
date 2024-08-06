@@ -12,11 +12,20 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{borrow::Cow, collections::HashMap, str::FromStr};
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    future::Future,
+    str::FromStr,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+};
 
-use async_std::{prelude::FutureExt, sync::Arc};
-use futures::TryStreamExt;
+use futures::stream::TryStreamExt;
 use tide::{http::Mime, Request, Response, Server, StatusCode};
+use tokio::task::JoinHandle;
 use tracing::debug;
 use zenoh::{
     bytes::{Encoding, ZBytes},
@@ -35,6 +44,36 @@ use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginCont
 
 mod config;
 use config::Config;
+
+lazy_static::lazy_static! {
+    static ref WORK_THREAD_NUM: AtomicUsize = AtomicUsize::new(config::DEFAULT_WORK_THREAD_NUM);
+    static ref MAX_BLOCK_THREAD_NUM: AtomicUsize = AtomicUsize::new(config::DEFAULT_MAX_BLOCK_THREAD_NUM);
+    // The global runtime is used in the dynamic plugins, which we can't get the current runtime
+    static ref TOKIO_RUNTIME: tokio::runtime::Runtime = tokio::runtime::Builder::new_multi_thread()
+               .worker_threads(WORK_THREAD_NUM.load(Ordering::SeqCst))
+               .max_blocking_threads(MAX_BLOCK_THREAD_NUM.load(Ordering::SeqCst))
+               .enable_all()
+               .build()
+               .expect("Unable to create runtime");
+}
+#[inline(always)]
+pub(crate) fn spawn_runtime<F>(task: F) -> JoinHandle<F::Output>
+where
+    F: Future + Send + 'static,
+    F::Output: Send + 'static,
+{
+    // Check whether able to get the current runtime
+    match tokio::runtime::Handle::try_current() {
+        Ok(rt) => {
+            // Able to get the current runtime (standalone binary), spawn on the current runtime
+            rt.spawn(task)
+        }
+        Err(_) => {
+            // Unable to get the current runtime (dynamic plugins), spawn on the global runtime
+            TOKIO_RUNTIME.spawn(task)
+        }
+    }
+}
 
 const DEFAULT_DIRECTORY_INDEX: &str = "index.html";
 
@@ -61,7 +100,11 @@ impl Plugin for WebServerPlugin {
             .ok_or_else(|| zerror!("Plugin `{}`: missing config", name))?;
         let conf: Config = serde_json::from_value(plugin_conf.clone())
             .map_err(|e| zerror!("Plugin `{}` configuration error: {}", name, e))?;
-        async_std::task::spawn(run(runtime.clone(), conf));
+        WORK_THREAD_NUM.store(conf.work_thread_num, Ordering::SeqCst);
+        MAX_BLOCK_THREAD_NUM.store(conf.max_block_thread_num, Ordering::SeqCst);
+
+        spawn_runtime(run(runtime.clone(), conf));
+
         Ok(Box::new(WebServerPlugin))
     }
 }
@@ -127,13 +170,9 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
                 == Some("SUB")
             {
                 tracing::debug!("Subscribe to {} for Multipart stream", selector.key_expr,);
-                let (sender, receiver) = async_std::channel::bounded(1);
-                async_std::task::spawn(async move {
-                    tracing::debug!(
-                        "Subscribe to {} for Multipart stream (task {})",
-                        selector.key_expr,
-                        async_std::task::current().id()
-                    );
+                let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
+                tokio::task::spawn(async move {
+                    tracing::debug!("Subscribe to {} for Multipart stream", selector.key_expr);
                     let sub = req
                         .state()
                         .declare_subscriber(&selector.key_expr.into_owned())
@@ -146,17 +185,17 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
                         buf.extend_from_slice("\n\n".as_bytes());
                         buf.extend_from_slice(&sample.payload().into::<Cow<[u8]>>());
 
-                        match sender
-                            .send(Ok(buf))
-                            .timeout(std::time::Duration::new(10, 0))
-                            .await
+                        match tokio::time::timeout(
+                            std::time::Duration::new(10, 0),
+                            sender.send(Ok(buf)),
+                        )
+                        .await
                         {
                             Ok(Ok(_)) => {}
                             Ok(Err(e)) => {
                                 tracing::debug!(
-                                    "Multipart error ({})! Unsubscribe and terminate (task {})",
-                                    e,
-                                    async_std::task::current().id()
+                                    "Multipart error ({})! Unsubscribe and terminate",
+                                    e
                                 );
                                 if let Err(e) = sub.undeclare().await {
                                     tracing::error!("Error undeclaring subscriber: {}", e);
@@ -164,10 +203,7 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
                                 break;
                             }
                             Err(_) => {
-                                tracing::debug!(
-                                    "Multipart timeout! Unsubscribe and terminate (task {})",
-                                    async_std::task::current().id()
-                                );
+                                tracing::debug!("Multipart timeout! Unsubscribe and terminate",);
                                 if let Err(e) = sub.undeclare().await {
                                     tracing::error!("Error undeclaring subscriber: {}", e);
                                 }
@@ -177,9 +213,17 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
                     }
                 });
 
+                let receiver = async_stream::stream! {
+                      while let Some(item) = receiver.recv().await {
+                          yield item;
+                      }
+                };
                 let mut res = Response::new(StatusCode::Ok);
                 res.set_content_type("multipart/x-mixed-replace; boundary=\"boundary\"");
-                res.set_body(tide::Body::from_reader(receiver.into_async_read(), None));
+                res.set_body(tide::Body::from_reader(
+                    Box::pin(receiver.into_async_read()),
+                    None,
+                ));
 
                 Ok(res)
             } else {
