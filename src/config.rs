@@ -12,17 +12,27 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 //
-use serde::de::{Unexpected, Visitor};
-use serde::{de, Deserialize, Deserializer};
 use std::fmt;
 
+use serde::{
+    de,
+    de::{Unexpected, Visitor},
+    Deserialize, Deserializer,
+};
+
 const DEFAULT_HTTP_INTERFACE: &str = "0.0.0.0";
+pub const DEFAULT_WORK_THREAD_NUM: usize = 2;
+pub const DEFAULT_MAX_BLOCK_THREAD_NUM: usize = 50;
 
 #[derive(Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Config {
     #[serde(deserialize_with = "deserialize_http_port")]
     pub(crate) http_port: String,
+    #[serde(default = "default_work_thread_num")]
+    pub work_thread_num: usize,
+    #[serde(default = "default_max_block_thread_num")]
+    pub max_block_thread_num: usize,
     __required__: Option<bool>,
     #[serde(default, deserialize_with = "deserialize_path")]
     __path__: Option<Vec<String>>,
@@ -33,6 +43,14 @@ where
     D: Deserializer<'de>,
 {
     deserializer.deserialize_any(HttpPortVisitor)
+}
+
+fn default_work_thread_num() -> usize {
+    DEFAULT_WORK_THREAD_NUM
+}
+
+fn default_max_block_thread_num() -> usize {
+    DEFAULT_MAX_BLOCK_THREAD_NUM
 }
 
 struct HttpPortVisitor;
@@ -149,6 +167,7 @@ mod tests {
             http_port,
             __required__,
             __path__,
+            ..
         } = config.unwrap();
 
         assert_eq!(http_port, format!("{DEFAULT_HTTP_INTERFACE}:8080"));
@@ -165,6 +184,7 @@ mod tests {
             http_port,
             __required__,
             __path__,
+            ..
         } = config.unwrap();
 
         assert_eq!(http_port, format!("{DEFAULT_HTTP_INTERFACE}:8080"));
@@ -184,6 +204,7 @@ mod tests {
             http_port,
             __required__,
             __path__,
+            ..
         } = config.unwrap();
 
         assert_eq!(http_port, format!("{DEFAULT_HTTP_INTERFACE}:8080"));
@@ -201,6 +222,7 @@ mod tests {
             http_port,
             __required__,
             __path__,
+            ..
         } = config.unwrap();
 
         assert_eq!(http_port, format!("{DEFAULT_HTTP_INTERFACE}:8080"));

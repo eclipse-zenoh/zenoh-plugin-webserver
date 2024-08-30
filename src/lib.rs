@@ -12,30 +12,73 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use async_std::prelude::FutureExt;
-use async_std::sync::Arc;
-use futures::TryStreamExt;
-use std::convert::TryFrom;
-use std::str::FromStr;
-use tide::http::Mime;
-use tide::{Request, Response, Server, StatusCode};
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    future::Future,
+    str::FromStr,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+};
+
+use futures::stream::TryStreamExt;
+use tide::{http::Mime, Request, Response, Server, StatusCode};
+use tokio::task::JoinHandle;
 use tracing::debug;
-use zenoh::buffers::ZBuf;
-use zenoh::plugins::{RunningPlugin, RunningPluginTrait, ZenohPlugin};
-use zenoh::query::Reply;
-use zenoh::runtime::Runtime;
-use zenoh::Result as ZResult;
-use zenoh::{prelude::r#async::*, Session};
-use zenoh_core::{bail, zerror};
+use zenoh::{
+    bytes::{Encoding, ZBytes},
+    internal::{
+        bail,
+        plugins::{RunningPlugin, RunningPluginTrait, ZenohPlugin},
+        runtime::Runtime,
+        zerror,
+    },
+    prelude::*,
+    query::Selector,
+    sample::Sample,
+    Result as ZResult, Session,
+};
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 
 mod config;
 use config::Config;
 
+lazy_static::lazy_static! {
+    static ref WORK_THREAD_NUM: AtomicUsize = AtomicUsize::new(config::DEFAULT_WORK_THREAD_NUM);
+    static ref MAX_BLOCK_THREAD_NUM: AtomicUsize = AtomicUsize::new(config::DEFAULT_MAX_BLOCK_THREAD_NUM);
+    // The global runtime is used in the dynamic plugins, which we can't get the current runtime
+    static ref TOKIO_RUNTIME: tokio::runtime::Runtime = tokio::runtime::Builder::new_multi_thread()
+               .worker_threads(WORK_THREAD_NUM.load(Ordering::SeqCst))
+               .max_blocking_threads(MAX_BLOCK_THREAD_NUM.load(Ordering::SeqCst))
+               .enable_all()
+               .build()
+               .expect("Unable to create runtime");
+}
+#[inline(always)]
+pub(crate) fn spawn_runtime<F>(task: F) -> JoinHandle<F::Output>
+where
+    F: Future + Send + 'static,
+    F::Output: Send + 'static,
+{
+    // Check whether able to get the current runtime
+    match tokio::runtime::Handle::try_current() {
+        Ok(rt) => {
+            // Able to get the current runtime (standalone binary), spawn on the current runtime
+            rt.spawn(task)
+        }
+        Err(_) => {
+            // Unable to get the current runtime (dynamic plugins), spawn on the global runtime
+            TOKIO_RUNTIME.spawn(task)
+        }
+    }
+}
+
 const DEFAULT_DIRECTORY_INDEX: &str = "index.html";
 
 lazy_static::lazy_static! {
-    static ref DEFAULT_MIME: Mime = Mime::from_str(KnownEncoding::AppOctetStream.into()).unwrap();
+    static ref DEFAULT_MIME: Mime = Mime::from_str(&Encoding::APPLICATION_OCTET_STREAM.to_string()).unwrap();
 }
 pub struct WebServerPlugin;
 impl PluginControl for WebServerPlugin {}
@@ -50,14 +93,18 @@ impl Plugin for WebServerPlugin {
     const PLUGIN_LONG_VERSION: &'static str = plugin_long_version!();
 
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<RunningPlugin> {
-        zenoh_util::try_init_log_from_env();
+        zenoh::try_init_log_from_env();
         let runtime_conf = runtime.config().lock();
         let plugin_conf = runtime_conf
             .plugin(name)
             .ok_or_else(|| zerror!("Plugin `{}`: missing config", name))?;
         let conf: Config = serde_json::from_value(plugin_conf.clone())
             .map_err(|e| zerror!("Plugin `{}` configuration error: {}", name, e))?;
-        async_std::task::spawn(run(runtime.clone(), conf));
+        WORK_THREAD_NUM.store(conf.work_thread_num, Ordering::SeqCst);
+        MAX_BLOCK_THREAD_NUM.store(conf.max_block_thread_num, Ordering::SeqCst);
+
+        spawn_runtime(run(runtime.clone(), conf));
+
         Ok(Box::new(WebServerPlugin))
     }
 }
@@ -70,7 +117,7 @@ zenoh_plugin_trait::declare_plugin!(WebServerPlugin);
 async fn run(runtime: Runtime, conf: Config) {
     debug!("WebServer plugin {}", WebServerPlugin::PLUGIN_LONG_VERSION);
 
-    let zenoh = match zenoh::init(runtime).res().await {
+    let zenoh = match zenoh::session::init(runtime).await {
         Ok(session) => Arc::new(session),
         Err(e) => {
             tracing::error!("Unable to init zenoh session for WebServer plugin : {}", e);
@@ -117,56 +164,47 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
     }
     match Selector::try_from(selector) {
         Ok(selector) => {
-            if selector
-                .parameters_cowmap()
-                .ok()
-                .map(|m| m.get("_method").map(|x| x.as_ref()) == Some("SUB"))
-                .unwrap_or(false)
+            if HashMap::<&str, &str>::from(&selector.parameters.clone().into_owned())
+                .get("_method")
+                .map(|x| x.as_ref())
+                == Some("SUB")
             {
                 tracing::debug!("Subscribe to {} for Multipart stream", selector.key_expr,);
-                let (sender, receiver) = async_std::channel::bounded(1);
-                async_std::task::spawn(async move {
-                    tracing::debug!(
-                        "Subscribe to {} for Multipart stream (task {})",
-                        selector.key_expr,
-                        async_std::task::current().id()
-                    );
+                let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
+                tokio::task::spawn(async move {
+                    tracing::debug!("Subscribe to {} for Multipart stream", selector.key_expr);
                     let sub = req
                         .state()
-                        .declare_subscriber(&selector.key_expr)
-                        .res_async()
+                        .declare_subscriber(&selector.key_expr.into_owned())
                         .await
                         .unwrap();
                     loop {
                         let sample = sub.recv_async().await.unwrap();
                         let mut buf = "--boundary\nContent-Type: ".as_bytes().to_vec();
-                        buf.extend_from_slice(sample.value.encoding.to_string().as_bytes());
+                        buf.extend_from_slice(sample.encoding().to_string().as_bytes());
                         buf.extend_from_slice("\n\n".as_bytes());
-                        buf.extend_from_slice(sample.value.payload.contiguous().as_ref());
+                        buf.extend_from_slice(&sample.payload().into::<Cow<[u8]>>());
 
-                        match sender
-                            .send(Ok(buf))
-                            .timeout(std::time::Duration::new(10, 0))
-                            .await
+                        match tokio::time::timeout(
+                            std::time::Duration::new(10, 0),
+                            sender.send(Ok(buf)),
+                        )
+                        .await
                         {
                             Ok(Ok(_)) => {}
                             Ok(Err(e)) => {
                                 tracing::debug!(
-                                    "Multipart error ({})! Unsubscribe and terminate (task {})",
-                                    e,
-                                    async_std::task::current().id()
+                                    "Multipart error ({})! Unsubscribe and terminate",
+                                    e
                                 );
-                                if let Err(e) = sub.undeclare().res().await {
+                                if let Err(e) = sub.undeclare().await {
                                     tracing::error!("Error undeclaring subscriber: {}", e);
                                 }
                                 break;
                             }
                             Err(_) => {
-                                tracing::debug!(
-                                    "Multipart timeout! Unsubscribe and terminate (task {})",
-                                    async_std::task::current().id()
-                                );
-                                if let Err(e) = sub.undeclare().res().await {
+                                tracing::debug!("Multipart timeout! Unsubscribe and terminate",);
+                                if let Err(e) = sub.undeclare().await {
                                     tracing::error!("Error undeclaring subscriber: {}", e);
                                 }
                                 break;
@@ -175,14 +213,22 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
                     }
                 });
 
+                let receiver = async_stream::stream! {
+                      while let Some(item) = receiver.recv().await {
+                          yield item;
+                      }
+                };
                 let mut res = Response::new(StatusCode::Ok);
                 res.set_content_type("multipart/x-mixed-replace; boundary=\"boundary\"");
-                res.set_body(tide::Body::from_reader(receiver.into_async_read(), None));
+                res.set_body(tide::Body::from_reader(
+                    Box::pin(receiver.into_async_read()),
+                    None,
+                ));
 
                 Ok(res)
             } else {
                 match zenoh_get(session, &selector).await {
-                    Ok(Some(value)) => Ok(response_with_value(value)),
+                    Ok(Some(sample)) => Ok(response_with_value(sample)),
                     Ok(None) => {
                         // Check if considering the URL as a directory, there is an existing "URL/DirectoryIndex" resource
                         let mut new_selector = selector.key_expr.as_str().to_string();
@@ -210,22 +256,21 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
     }
 }
 
-async fn zenoh_get(session: &Session, selector: &Selector<'_>) -> ZResult<Option<Value>> {
-    let replies = session.get(selector).res().await?;
+async fn zenoh_get(session: &Session, selector: &Selector<'_>) -> ZResult<Option<Sample>> {
+    let replies = session.get(selector).await?;
     match replies.recv_async().await {
-        Ok(Reply {
-            sample: Ok(sample), ..
-        }) => Ok(Some(sample.value)),
-        Ok(Reply {
-            sample: Err(value), ..
-        }) => bail!("Zenoh get on {} returned the error: {}", selector, value),
+        Ok(reply) => match reply.result() {
+            Ok(sample) => Ok(Some(sample.to_owned())),
+            Err(err) => bail!("Zenoh get on {} returned the error: {:?}", selector, err),
+        },
         Err(_) => Ok(None),
     }
 }
 
-fn response_with_value(value: Value) -> Response {
-    let mime = Mime::from_str(&value.encoding.to_string()).unwrap_or_else(|_| DEFAULT_MIME.clone());
-    response_ok(mime, value.payload)
+fn response_with_value(sample: Sample) -> Response {
+    let mime =
+        Mime::from_str(&sample.encoding().to_string()).unwrap_or_else(|_| DEFAULT_MIME.clone());
+    response_ok(mime, sample.payload())
 }
 
 fn bad_request(body: &str) -> Response {
@@ -252,9 +297,9 @@ fn redirect(url: &str) -> Response {
     res
 }
 
-fn response_ok(content_type: Mime, payload: ZBuf) -> Response {
+fn response_ok(content_type: Mime, payload: &ZBytes) -> Response {
     let mut res = Response::new(StatusCode::Ok);
     res.set_content_type(content_type);
-    res.set_body(&*payload.contiguous());
+    res.set_body(payload.into::<Cow<[u8]>>().as_ref());
     res
 }
