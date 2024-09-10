@@ -4258,7 +4258,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-plugin-webserver"
-version = "1.0.0-dev"
+version = "1.0.0-dev-13-g11bc12c"
 dependencies = [
  "anyhow",
  "async-stream",
