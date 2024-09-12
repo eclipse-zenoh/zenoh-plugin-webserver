@@ -35,7 +35,6 @@ use zenoh::{
         runtime::Runtime,
         zerror,
     },
-    prelude::*,
     query::Selector,
     sample::Sample,
     Result as ZResult, Session,
