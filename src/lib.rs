@@ -11,10 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
 use std::{
     borrow::Cow,
-    collections::HashMap,
     future::Future,
     str::FromStr,
     sync::{
@@ -163,20 +161,15 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
     }
     match Selector::try_from(selector) {
         Ok(selector) => {
-            if HashMap::<&str, &str>::from(&selector.parameters.clone().into_owned())
-                .get("_method")
-                .map(|x| x.as_ref())
-                == Some("SUB")
-            {
-                tracing::debug!("Subscribe to {} for Multipart stream", selector.key_expr,);
+            if selector.parameters().get("_method") == Some("SUB") {
+                tracing::debug!("Subscribe to {} for Multipart stream", selector.key_expr());
                 let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
+                // @TODO: even converting selector into Selector<'static> Rust complains about the lifetime.
+                //        Using String as a workaround for the time being.
+                let c_selector = selector.key_expr().as_str().to_string();
                 tokio::task::spawn(async move {
-                    tracing::debug!("Subscribe to {} for Multipart stream", selector.key_expr);
-                    let sub = req
-                        .state()
-                        .declare_subscriber(&selector.key_expr.into_owned())
-                        .await
-                        .unwrap();
+                    tracing::debug!("Subscribe to {} for Multipart stream", c_selector);
+                    let sub = req.state().declare_subscriber(c_selector).await.unwrap();
                     loop {
                         let sample = sub.recv_async().await.unwrap();
                         let mut buf = "--boundary\nContent-Type: ".as_bytes().to_vec();
@@ -230,7 +223,7 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
                     Ok(Some(sample)) => Ok(response_with_value(sample)),
                     Ok(None) => {
                         // Check if considering the URL as a directory, there is an existing "URL/DirectoryIndex" resource
-                        let mut new_selector = selector.key_expr.as_str().to_string();
+                        let mut new_selector = selector.key_expr().as_str().to_string();
                         new_selector.push('/');
                         new_selector.push_str(DEFAULT_DIRECTORY_INDEX);
                         if let Ok(new_selector) = Selector::try_from(new_selector) {
