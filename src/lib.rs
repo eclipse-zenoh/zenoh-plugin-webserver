@@ -164,9 +164,7 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
             if selector.parameters().get("_method") == Some("SUB") {
                 tracing::debug!("Subscribe to {} for Multipart stream", selector.key_expr());
                 let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
-                // @TODO: even converting selector into Selector<'static> Rust complains about the lifetime.
-                //        Using String as a workaround for the time being.
-                let c_selector = selector.key_expr().as_str().to_string();
+                let c_selector = selector.key_expr().clone().into_owned();
                 tokio::task::spawn(async move {
                     tracing::debug!("Subscribe to {} for Multipart stream", c_selector);
                     let sub = req.state().declare_subscriber(c_selector).await.unwrap();
