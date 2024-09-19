@@ -4321,6 +4321,7 @@ dependencies = [
 name = "zenoh-protocol"
 version = "1.0.0-dev"
 source = "git+https://github.com/eclipse-zenoh/zenoh.git?branch=main#1b046d4781017bf588027c38dc3d3285dac024cd"
+
 dependencies = [
  "const_format",
  "rand 0.8.5",
