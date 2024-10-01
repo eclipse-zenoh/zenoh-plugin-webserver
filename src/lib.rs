@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{
-    borrow::Cow,
     future::Future,
     str::FromStr,
     sync::{
@@ -173,7 +172,7 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
                         let mut buf = "--boundary\nContent-Type: ".as_bytes().to_vec();
                         buf.extend_from_slice(sample.encoding().to_string().as_bytes());
                         buf.extend_from_slice("\n\n".as_bytes());
-                        buf.extend_from_slice(&sample.payload().into::<Cow<[u8]>>());
+                        buf.extend_from_slice(sample.payload().to_bytes().as_ref());
 
                         match tokio::time::timeout(
                             std::time::Duration::new(10, 0),
@@ -290,6 +289,6 @@ fn redirect(url: &str) -> Response {
 fn response_ok(content_type: Mime, payload: &ZBytes) -> Response {
     let mut res = Response::new(StatusCode::Ok);
     res.set_content_type(content_type);
-    res.set_body(payload.into::<Cow<[u8]>>().as_ref());
+    res.set_body(payload.to_bytes().as_ref());
     res
 }
