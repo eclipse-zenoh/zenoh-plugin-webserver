@@ -164,7 +164,7 @@ async fn handle_request(req: Request<Arc<Session>>) -> tide::Result<Response> {
                 tracing::debug!("Subscribe to {} for Multipart stream", selector.key_expr());
                 let (sender, mut receiver) = tokio::sync::mpsc::channel(1);
                 let c_selector = selector.key_expr().clone().into_owned();
-                tokio::task::spawn(async move {
+                spawn_runtime(async move {
                     tracing::debug!("Subscribe to {} for Multipart stream", c_selector);
                     let sub = req.state().declare_subscriber(c_selector).await.unwrap();
                     loop {
