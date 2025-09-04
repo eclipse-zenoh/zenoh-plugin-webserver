@@ -13,7 +13,7 @@
 #
 [package]
 name = "zenoh-plugin-webserver"
-version = "1.5.0"
+version = "1.5.1"
 repository = "https://github.com/eclipse-zenoh/zenoh-plugin-webserver"
 homepage = "http://zenoh.io"
 authors = [
@@ -49,10 +49,10 @@ tide = "0.16.0"
 tokio = { version = "1.35.1", default-features = false } # Default features are disabled due to some crates' requirements
 tokio-stream = "0.1.15"
 tracing = "0.1"
-zenoh = { version = "1.5.0", features = [
+zenoh = { version = "1.5.1", features = [
   "unstable", "internal", "plugins"
 ] , git = "https://github.com/eclipse-zenoh/zenoh.git" , branch = "main" }
-zenoh-plugin-trait = { version = "1.5.0", default-features = false , git = "https://github.com/eclipse-zenoh/zenoh.git" , branch = "main" }
+zenoh-plugin-trait = { version = "1.5.1", default-features = false , git = "https://github.com/eclipse-zenoh/zenoh.git" , branch = "main" }
 
 [build-dependencies]
 rustc_version = "0.4.0"
@@ -63,4 +63,4 @@ maintainer = "zenoh-dev@eclipse.org"
 copyright = "2017, 2022 ZettaScale Technology"
 section = "net"
 license-file = ["LICENSE", "0"]
-depends = "zenohd (=1.5.0)"
+depends = "zenohd (=1.5.1)"
