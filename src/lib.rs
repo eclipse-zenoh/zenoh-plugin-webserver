@@ -29,7 +29,7 @@ use zenoh::{
     internal::{
         bail,
         plugins::{RunningPlugin, RunningPluginTrait, ZenohPlugin},
-        runtime::Runtime,
+        runtime::DynamicRuntime,
         zerror,
     },
     query::Selector,
@@ -81,7 +81,7 @@ impl PluginControl for WebServerPlugin {}
 impl ZenohPlugin for WebServerPlugin {}
 
 impl Plugin for WebServerPlugin {
-    type StartArgs = Runtime;
+    type StartArgs = DynamicRuntime;
     type Instance = RunningPlugin;
 
     const DEFAULT_NAME: &'static str = "zenoh-plugin-webserver";
@@ -90,10 +90,10 @@ impl Plugin for WebServerPlugin {
 
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<RunningPlugin> {
         zenoh::try_init_log_from_env();
-        let runtime_conf = runtime.config().lock();
-        let plugin_conf = runtime_conf
-            .plugin(name)
-            .ok_or_else(|| zerror!("Plugin `{}`: missing config", name))?;
+        let plugin_conf = runtime
+            .get_config()
+            .get_plugin_config(name)
+            .map_err(|_| zerror!("Plugin `{}`: missing config", name))?;
         let conf: Config = serde_json::from_value(plugin_conf.clone())
             .map_err(|e| zerror!("Plugin `{}` configuration error: {}", name, e))?;
         WORK_THREAD_NUM.store(conf.work_thread_num, Ordering::SeqCst);
@@ -110,7 +110,7 @@ impl RunningPluginTrait for WebServerPlugin {}
 #[cfg(feature = "dynamic_plugin")]
 zenoh_plugin_trait::declare_plugin!(WebServerPlugin);
 
-async fn run(runtime: Runtime, conf: Config) {
+async fn run(runtime: DynamicRuntime, conf: Config) {
     debug!("WebServer plugin {}", WebServerPlugin::PLUGIN_LONG_VERSION);
 
     let zenoh = match zenoh::session::init(runtime).await {
