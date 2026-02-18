@@ -44,9 +44,9 @@ jobs:
         run: cargo fmt --check -- --config "unstable_features=true,imports_granularity=Crate,group_imports=StdExternalCrate"
       - name: Clippy without Cargo.lock
         run: |
-          mv Cargo.lock Cargo.lock.bak
+          rm Cargo.lock
           cargo clippy --all --examples -- -D warnings
-          mv Cargo.lock.bak Cargo.lock
+          git restore Cargo.lock
 
       - name: Build
         run: cargo build --verbose --all-targets
