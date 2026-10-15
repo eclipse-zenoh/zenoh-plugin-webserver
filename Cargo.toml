@@ -13,7 +13,7 @@
 #
 [package]
 name = "zenoh-plugin-webserver"
-version = "1.10.1"
+version = "1.10.1-8-g0343ac0"
 repository = "https://github.com/eclipse-zenoh/zenoh-plugin-webserver"
 homepage = "http://zenoh.io"
 authors = [
